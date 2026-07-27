@@ -1,4 +1,4 @@
-# DevOps Nexus — Enterprise Internal Developer Platform (IDP) & Autonomous AIOps Control Plane
+# DevOps Nexus — Deployment Management & Troubleshooting Platform & Autonomous AIOps Control Plane
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.28%2B-blue.svg)](https://kubernetes.io/)
@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/Frontend-React%2018-blue.svg)](https://reactjs.org/)
 
-**DevOps Nexus** is an Enterprise-grade Internal Developer Platform (IDP), Autonomous AIOps Control Plane, and GitOps Management Engine. It bridges Kubernetes cluster operations, declarative continuous delivery (ArgoCD), multi-dimensional telemetry (Prometheus & Loki), fine-grained RBAC authorization, and autonomous AI-driven root cause diagnostics into a unified operational workspace.
+**DevOps Nexus** is an Deployment Management & Troubleshooting Platform, Autonomous AIOps Control Plane, and GitOps Management Engine. It bridges Kubernetes cluster operations, declarative continuous delivery (ArgoCD), multi-dimensional telemetry (Prometheus & Loki), fine-grained RBAC authorization, and autonomous AI-driven root cause diagnostics into a unified operational workspace.
 
 ---
 

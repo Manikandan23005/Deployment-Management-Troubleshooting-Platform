@@ -66,19 +66,27 @@ graph TD
 ## 📂 Project Structure
 
 ```text
-├── architecture/                 # System, AI, GitOps, & Observability Architecture specs
-├── docs/                         # Comprehensive platform guides & API references
-├── platform/
+├── ai/                           # AI subsystem architecture & module specifications
+├── applications/                 # Microservices suite (auth, gateway, orders, payment, products, users, notification, traffic_generator)
+├── architecture/                 # System, AI, GitOps, & Observability Architecture specs & diagrams
+├── assets/                       # Platform architecture diagrams & visual assets
+├── backups/                      # Cluster and platform backup utilities
+├── diagnostics/                  # System & telemetry diagnostic scripts
+├── docker/                       # Docker specifications & container configs
+├── docs/                         # 15 comprehensive platform guides & API references
+├── examples/                     # Sample API requests, payloads, & usage examples
+├── gitops/                       # ArgoCD application manifests & continuous delivery configs
+├── helm/                         # Microservice Helm Charts & multi-environment values (dev, prod, qa, stage)
+├── kubernetes/                   # Base Kubernetes manifest specifications (deployments, services, HPA, RBAC)
+├── monitoring/                   # Prometheus, Loki, Alertmanager, & Grafana configuration specs
+├── platform/                     # Main Platform Control Plane
 │   ├── backend/                  # FastAPI Core Backend Service & AI Agent Runtime
-│   │   ├── app/clients/          # Kubernetes, ArgoCD, Prometheus, Loki, GitHub clients
-│   │   ├── app/routers/          # REST API Endpoints (K8s, GitOps, Telemetry, AI, Auth)
-│   │   └── app/services/         # Business logic (AIOps pipeline, GitOps engine, Scope)
+│   │   ├── app/clients/          # Kubernetes, ArgoCD, Prometheus, Loki, GitHub, LLM clients
+│   │   ├── app/routers/          # REST API Endpoints (K8s, GitOps, Telemetry, AI, Auth, IAM)
+│   │   └── app/services/         # Business logic (AIOps pipeline, GitOps engine, Scope, Audit)
 │   ├── frontend/                 # Vite React 18 TypeScript Dashboard UI
 │   └── shared/                   # Shared exceptions & model definitions
-├── helm/                         # Microservice Helm Charts (auth, payment, orders, etc.)
-├── gitops/                       # ArgoCD application manifests
-├── kubernetes/                   # Base Kubernetes manifest specifications
-└── examples/                     # Sample requests, API payloads, & usage examples
+└── scripts/                      # Platform deployment, healthcheck, backup, & lifecycle scripts
 ```
 
 ---

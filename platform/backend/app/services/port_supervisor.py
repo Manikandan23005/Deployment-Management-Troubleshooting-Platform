@@ -1,4 +1,5 @@
 # --- Automatic Telemetry Port Supervisor Service ---
+import shutil
 import subprocess
 import socket
 import time
@@ -6,7 +7,7 @@ import threading
 from app.core.logging import logger
 
 class TelemetryPortSupervisor:
-    """Monitors and automatically spawns port-forwards for Prometheus (9090), Loki (3100), and Grafana (8082)."""
+    """Monitors and automatically verifies telemetry ports for Prometheus (30090/9090), Loki (30100/3100), and Grafana (30082/8082)."""
 
     def __init__(self):
         self._prometheus_proc = None
@@ -24,9 +25,11 @@ class TelemetryPortSupervisor:
             return False
 
     def ensure_telemetry_ports(self):
-        """Checks ports 9090, 3100, and 8082. If closed, spawns background kubectl port-forwards."""
-        # 1. Prometheus check & auto-repair
-        if not self.is_port_open("127.0.0.1", 9090):
+        """Verifies telemetry ports (NodePorts & localhost). Spawns port-forwards only if kubectl CLI is present."""
+        has_kubectl = bool(shutil.which("kubectl"))
+
+        # 1. Prometheus check (NodePort 30090 or 9090)
+        if not self.is_port_open("127.0.0.1", 9090) and not self.is_port_open("192.168.49.2", 30090) and has_kubectl:
             try:
                 self._prometheus_proc = subprocess.Popen(
                     ["kubectl", "port-forward", "-n", "monitoring", "svc/kube-prometheus-stack-prometheus", "9090:9090", "--address=0.0.0.0"],
@@ -37,8 +40,8 @@ class TelemetryPortSupervisor:
             except Exception as e:
                 logger.warning(f"Failed to spawn Prometheus port-forward: {str(e)}")
 
-        # 2. Loki check & auto-repair
-        if not self.is_port_open("127.0.0.1", 3100):
+        # 2. Loki check (NodePort 30100 or 3100)
+        if not self.is_port_open("127.0.0.1", 3100) and not self.is_port_open("192.168.49.2", 30100) and has_kubectl:
             try:
                 self._loki_proc = subprocess.Popen(
                     ["kubectl", "port-forward", "-n", "logging-lab", "svc/loki", "3100:3100", "--address=0.0.0.0"],
@@ -49,8 +52,8 @@ class TelemetryPortSupervisor:
             except Exception as e:
                 logger.warning(f"Failed to spawn Loki port-forward: {str(e)}")
 
-        # 3. Grafana check & auto-repair
-        if not self.is_port_open("127.0.0.1", 8082):
+        # 3. Grafana check (NodePort 30082 or 8082)
+        if not self.is_port_open("127.0.0.1", 8082) and not self.is_port_open("192.168.49.2", 30082) and has_kubectl:
             try:
                 self._grafana_proc = subprocess.Popen(
                     ["kubectl", "port-forward", "-n", "monitoring", "svc/kube-prometheus-stack-grafana", "8082:80", "--address=0.0.0.0"],
@@ -68,7 +71,7 @@ class TelemetryPortSupervisor:
                 self.ensure_telemetry_ports()
             except Exception:
                 pass
-            time.sleep(3.0)
+            time.sleep(5.0)
 
     def start_supervisor_daemon(self):
         if not self._monitoring:

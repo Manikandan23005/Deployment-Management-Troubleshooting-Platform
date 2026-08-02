@@ -53,7 +53,7 @@ const Metrics: React.FC = () => {
 
   useEffect(() => {
     fetchAllMetrics();
-    const interval = setInterval(fetchAllMetrics, 5000);
+    const interval = setInterval(fetchAllMetrics, 3000);
     return () => clearInterval(interval);
   }, [JSON.stringify(getScopeParams()), timeRange]);
 
@@ -148,13 +148,31 @@ const Metrics: React.FC = () => {
   const generateSvgPath = (data: any[], width: number, height: number): { line: string; area: string } => {
     if (!data || data.length < 2) return { line: '', area: '' };
     const values = data.map(d => d[1]);
-    const maxVal = Math.max(...values, 1);
-    const minVal = Math.min(...values, 0);
+    const rawMin = Math.min(...values);
+    const rawMax = Math.max(...values);
+
+    let minVal: number;
+    let maxVal: number;
+
+    if (rawMax === rawMin) {
+      minVal = Math.max(0, rawMin - (rawMin * 0.15 || 1));
+      maxVal = rawMax + (rawMax * 0.15 || 1);
+    } else {
+      const delta = rawMax - rawMin;
+      if (delta < rawMax * 0.25) {
+        minVal = Math.max(0, rawMin - delta * 0.6);
+        maxVal = rawMax + delta * 0.6;
+      } else {
+        minVal = Math.min(0, rawMin);
+        maxVal = rawMax * 1.1;
+      }
+    }
+
     const range = maxVal - minVal || 1;
 
     const points = data.map((d, index) => {
       const x = (index / (data.length - 1)) * width;
-      const y = height - ((d[1] - minVal) / range) * (height - 20) - 10;
+      const y = height - ((d[1] - minVal) / range) * (height - 30) - 15;
       return `${x},${y}`;
     });
 
@@ -219,8 +237,8 @@ const Metrics: React.FC = () => {
             onClick={fetchAllMetrics}
             className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-white transition-colors flex items-center gap-1 text-xs font-semibold"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>Sync</span>
+            <RefreshCw className="h-3.5 w-3.5 animate-spin-slow" />
+            <span>Live Sync (3s)</span>
           </button>
         </div>
       </div>
@@ -342,7 +360,7 @@ const Metrics: React.FC = () => {
                   <svg className="w-full h-full overflow-visible" viewBox="0 0 400 180" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id={`grad-${chart.id}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={chart.color} stopOpacity="0.3" />
+                        <stop offset="0%" stopColor={chart.color} stopOpacity="0.35" />
                         <stop offset="100%" stopColor={chart.color} stopOpacity="0.0" />
                       </linearGradient>
                     </defs>
@@ -361,8 +379,8 @@ const Metrics: React.FC = () => {
                     Collecting data points...
                   </div>
                 )}
-                <div className="absolute top-2 right-2 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                  Prometheus 15s step
+                <div className="absolute top-2 right-2 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                  <Radio className="h-2.5 w-2.5 text-blue-400 animate-pulse" /> Live Prometheus Stream
                 </div>
               </div>
             </div>

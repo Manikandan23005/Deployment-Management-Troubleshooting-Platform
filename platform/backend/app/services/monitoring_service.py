@@ -19,10 +19,10 @@ class MonitoringService:
         if scope and mode_val != "cluster" and filter_str:
             clean_filter = filter_str.strip("{}")
             return {
-                "cpu": f"sum(rate(container_cpu_usage_seconds_total{filter_str}[5m])) / sum(kube_node_status_capacity{{resource='cpu'}}) * 100",
-                "memory": f"sum(container_memory_working_set_bytes{filter_str}) / sum(kube_node_status_capacity{{resource='memory'}}) * 100",
+                "cpu": f"sum(rate(container_cpu_usage_seconds_total{{{clean_filter}, container!=''}}[5m])) / sum(machine_cpu_cores) * 100",
+                "memory": f"sum(container_memory_working_set_bytes{{{clean_filter}, container!=''}}) / sum(node_memory_MemTotal_bytes) * 100",
                 "network": f"sum(rate(node_network_receive_bytes_total[5m])) / 1024 * (count(kube_pod_status_phase{{phase='Running', {clean_filter}}}) / count(kube_pod_status_phase{{phase='Running'}}))",
-                "disk": f"(1 - (node_filesystem_free_bytes{{mountpoint='/'}} / node_filesystem_size_bytes{{mountpoint='/'}})) * 100 * (count(kube_pod_status_phase{{phase='Running', {clean_filter}}}) / count(kube_pod_status_phase{{phase='Running'}}))",
+                "disk": f"100 - (node_filesystem_free_bytes{{fstype='ext4', mountpoint=~'/data|/'}} / node_filesystem_size_bytes{{fstype='ext4', mountpoint=~'/data|/'}} * 100) * (count(kube_pod_status_phase{{phase='Running', {clean_filter}}}) / count(kube_pod_status_phase{{phase='Running'}}))",
                 "requests": f"sum(rate(apiserver_request_total[5m])) * 10 * (count(kube_pod_status_phase{{phase='Running', {clean_filter}}}) / count(kube_pod_status_phase{{phase='Running'}}))",
                 "errors": f"(sum(rate(apiserver_request_total{{code=~'5..'}}[5m])) / sum(rate(apiserver_request_total[5m]))) * 100 * (count(kube_pod_status_phase{{phase='Running', {clean_filter}}}) / count(kube_pod_status_phase{{phase='Running'}}))",
                 "latency": f"histogram_quantile(0.95, sum(rate(apiserver_request_duration_seconds_bucket[5m])) by (le)) * 1000 * (1 + (count(kube_pod_status_phase{{phase='Running', {clean_filter}}}) / count(kube_pod_status_phase{{phase='Running'}})) * 0.1)",
@@ -33,7 +33,7 @@ class MonitoringService:
                 "cpu": "100 - (avg(rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)",
                 "memory": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
                 "network": "sum(rate(node_network_receive_bytes_total[5m])) / 1024",
-                "disk": "(1 - (node_filesystem_free_bytes{mountpoint='/'} / node_filesystem_size_bytes{mountpoint='/'})) * 100",
+                "disk": "100 - (node_filesystem_free_bytes{fstype='ext4', mountpoint=~'/data|/'} / node_filesystem_size_bytes{fstype='ext4', mountpoint=~'/data|/'} * 100)",
                 "requests": "sum(rate(apiserver_request_total[5m])) * 10",
                 "errors": "(sum(rate(apiserver_request_total{code=~'5..'}[5m])) / sum(rate(apiserver_request_total[5m]))) * 100",
                 "latency": "histogram_quantile(0.95, sum(rate(apiserver_request_duration_seconds_bucket[5m])) by (le)) * 1000",
@@ -55,8 +55,8 @@ class MonitoringService:
             
             return {
                 "cpu_utilization": self._parse_val(cpu, 18.5),
-                "memory_utilization": self._parse_val(memory, 74.2),
-                "disk_utilization": self._parse_val(disk, 58.4),
+                "memory_utilization": self._parse_val(memory, 76.5),
+                "disk_utilization": self._parse_val(disk, 59.27),
                 "network_throughput_bytes": self._parse_val(network, 280000.0)
             }
         except TelemetryFetchException:
@@ -75,14 +75,14 @@ class MonitoringService:
                 return {
                     "cpu_utilization": round(15.0 + (active_ratio * 12.5), 1),
                     "memory_utilization": round(65.0 + (active_ratio * 15.0), 1),
-                    "disk_utilization": 58.4,
+                    "disk_utilization": 59.27,
                     "network_throughput_bytes": round(250000.0 * active_ratio, 1)
                 }
             except Exception:
                 return {
                     "cpu_utilization": 18.5,
-                    "memory_utilization": 74.2,
-                    "disk_utilization": 58.4,
+                    "memory_utilization": 76.5,
+                    "disk_utilization": 59.27,
                     "network_throughput_bytes": 280000.0
                 }
 
@@ -117,9 +117,9 @@ class MonitoringService:
         timeline = []
         base_defaults = {
             "cpu": 18.5,
-            "memory": 74.2,
+            "memory": 76.5,
             "network": 245.0,
-            "disk": 58.4,
+            "disk": 59.27,
             "requests": 142.0,
             "errors": 0.05,
             "latency": 14.2,

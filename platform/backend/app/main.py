@@ -33,9 +33,10 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event():
     try:
-        port_supervisor.ensure_telemetry_ports()
+        from app.services.platform_initializer import platform_initializer
+        platform_initializer.initialize_platform()
     except Exception as e:
-        setup_logging().warning(f"Telemetry port supervisor failed on startup: {str(e)}")
+        setup_logging().warning(f"Platform initializer failed on startup: {str(e)}")
 
 # Exception handlers for request/response validation and uniform error formats
 @app.exception_handler(HTTPException)

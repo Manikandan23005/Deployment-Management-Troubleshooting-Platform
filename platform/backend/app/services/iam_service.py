@@ -141,9 +141,9 @@ class IAMService:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         
         default_admin_uname = os.getenv("DEFAULT_ADMIN_USERNAME", "admin").lower()
-        default_admin_pwd = os.getenv("DEFAULT_ADMIN_PASSWORD", "DevOpsNexus@123")
+        default_admin_pwd = os.getenv("DEFAULT_ADMIN_PASSWORD", "test123")
 
-        # 1. Default Administrator Account (First Login Password Change Required)
+        # 1. Default Administrator Account
         self._users[default_admin_uname] = User(
             username=default_admin_uname,
             full_name="Platform Administrator",
@@ -156,7 +156,7 @@ class IAMService:
             created_at=now,
             last_login=now,
             password_hash=hash_password(default_admin_pwd),
-            require_password_change=True
+            require_password_change=False
         )
 
         # 2. Pre-seeded Enterprise Role Accounts
@@ -225,6 +225,10 @@ class IAMService:
                         last_login=getattr(u, 'last_login', u.created_at) or datetime.datetime.now(datetime.timezone.utc).isoformat()
                     )
                     db.add(db_user)
+                elif u.username == "admin":
+                    existing.status = "ACTIVE"
+                    existing.password_hash = u.password_hash
+                    db.add(existing)
             db.commit()
             db.close()
             logger.info("Successfully synced user accounts into PostgreSQL database 'devops_nexus'.")
@@ -335,13 +339,17 @@ class IAMService:
         return user
 
     def record_failed_login(self, username: str) -> bool:
-        """Increments failed login attempts. Locks account after 5 failed attempts."""
+        """Increments failed login attempts. Locks non-root accounts after 5 failed attempts."""
         uname = username.lower()
         user = self._users.get(uname)
         if not user:
             return False
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= 5:
+            if uname == "admin":
+                logger.warning(f"Root admin account '@{username}' reached 5 failed login attempts - resetting counter to prevent root lockout.")
+                user.failed_login_attempts = 0
+                return False
             user.is_locked = True
             user.status = UserStatus.DISABLED
             logger.warning(f"Account '@{username}' LOCKED due to 5 repeated failed login attempts.")

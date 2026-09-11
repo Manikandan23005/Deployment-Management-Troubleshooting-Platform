@@ -31,7 +31,7 @@ export const ForcePasswordChange: React.FC = () => {
       alert('Password updated successfully! Welcome to DevOps Nexus.');
       navigate('/overview');
     } catch (err: any) {
-      setError(err.message || 'Failed to update password. Please check your current password.');
+      setError(err.response?.data?.detail || err.message || 'Failed to update password. Please check your current password.');
     } finally {
       setLoading(false);
     }

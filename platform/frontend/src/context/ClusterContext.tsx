@@ -39,7 +39,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       setLoading(true);
       const res = await api.getClusters();
-      if (res.data.success && Array.isArray(res.data.data)) {
+      if (res && res.data && res.data.success && Array.isArray(res.data.data)) {
         const list: ClusterItem[] = res.data.data;
         setClusters(list);
 
@@ -52,10 +52,20 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (selected) {
           setActiveClusterState(selected);
           localStorage.setItem('nexus_active_cluster_id', selected.id);
+        } else {
+          setActiveClusterState(null);
+          localStorage.removeItem('nexus_active_cluster_id');
         }
+      } else {
+        setClusters([]);
+        setActiveClusterState(null);
+        localStorage.removeItem('nexus_active_cluster_id');
       }
     } catch (err) {
-      console.error('Failed to load clusters:', err);
+      console.warn('Failed to load clusters:', err);
+      setClusters([]);
+      setActiveClusterState(null);
+      localStorage.removeItem('nexus_active_cluster_id');
     } finally {
       setLoading(false);
     }

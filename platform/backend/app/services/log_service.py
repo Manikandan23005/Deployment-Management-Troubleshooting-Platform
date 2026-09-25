@@ -9,6 +9,13 @@ from app.core.logging import logger
 class LogService:
     def get_logs(self, pod_name: str, search: Optional[str] = None, limit: int = 100, scope: Optional[Any] = None, container: Optional[str] = None) -> List[Dict[str, Any]]:
         """Queries Loki log streams for pods, with live Kubernetes API log stream fallback."""
+        try:
+            from app.services.cluster_registry import cluster_registry
+            if not cluster_registry.list_clusters():
+                return []
+        except Exception:
+            return []
+
         result = []
 
         # 1. Format LogQL selector
@@ -98,12 +105,7 @@ class LogService:
         except Exception as e:
             logger.warning(f"K8s pod log fallback warning: {str(e)}")
 
-        # Default synthetic log line if cluster is completely empty
-        return [{
-            "timestamp": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            "pod": pod_name if pod_name != "all" else "auth-service",
-            "message": "GET /health responded 200 - Container status: Running (100% Synced)"
-        }]
+        return []
 
     def _nano_to_iso(self, nano_str: str) -> str:
         try:

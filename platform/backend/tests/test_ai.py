@@ -2,20 +2,34 @@
 from unittest.mock import patch, MagicMock
 
 def test_ai_chat_completions(client):
-    response = client.post(
-        "/api/v1/ai/chat",
-        json={"prompt": "why is the container crashing?", "provider": "groq"}
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is True
-    assert "summary" in data["data"]
-    assert "root_cause" in data["data"]
-    assert "evidence_quality" in data["data"]
+    mock_pipeline_res = {
+        "executive_summary": "Container Crash Diagnosis",
+        "root_cause": "OOM Killed due to memory limits",
+        "evidence_quality": "HIGH",
+        "verified_evidence": ["Pod failed"],
+        "supporting_evidence": [],
+        "affected_resources": ["devops-nexus-prod/auth-service"],
+        "recommended_remediation": "Scale resources",
+        "risk_assessment": "Medium",
+        "investigation_steps": [],
+        "suggested_plan": None
+    }
+    with patch("app.services.ai_agent_pipeline.ai_agent_pipeline.run_pipeline", return_value=mock_pipeline_res):
+        response = client.post(
+            "/api/v1/ai/chat",
+            json={"prompt": "why is the container crashing?", "provider": "groq"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "summary" in data["data"]
+        assert "root_cause" in data["data"]
+        assert "evidence_quality" in data["data"]
 
 def test_ai_incident_analysis(client):
     mock_json = '{"summary": "Pod Incident Summary", "root_cause": "Detailed Crash Analysis", "evidence": ["OOMKilled"], "recommendations": ["Increase memory limits"], "affected_resources": ["payment-pod"], "severity": "Critical", "confidence": 100}'
-    with patch("app.clients.llm.llm_client.generate_chat_response", return_value=mock_json):
+    with patch("app.services.context_builder.context_builder.build_incident_context", return_value={"target_pod": "payment-pod"}), \
+         patch("app.clients.llm.llm_client.generate_chat_response", return_value=mock_json):
         response = client.post(
             "/api/v1/ai/analyze-incident",
             json={

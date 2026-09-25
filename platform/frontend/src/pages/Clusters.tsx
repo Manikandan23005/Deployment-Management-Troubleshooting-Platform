@@ -204,6 +204,33 @@ export const Clusters: React.FC = () => {
       {/* Cluster Table */}
       {contextLoading ? (
         <Loading />
+      ) : clusters.length === 0 ? (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center space-y-4 shadow-xl">
+          <div className="w-16 h-16 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto border border-blue-500/20">
+            <Server className="h-8 w-8" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white">No Kubernetes Clusters Registered</h3>
+            <p className="text-sm text-slate-400 max-w-md mx-auto mt-1">
+              Add a Kubernetes cluster using Kubeconfig or register an AWS Account to discover and manage Amazon EKS clusters.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-blue-500/20"
+            >
+              <Plus className="h-4 w-4" />
+              Add Kubernetes Cluster
+            </button>
+            <a
+              href="/aws/accounts"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+            >
+              Register AWS Account
+            </a>
+          </div>
+        </div>
       ) : (
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">

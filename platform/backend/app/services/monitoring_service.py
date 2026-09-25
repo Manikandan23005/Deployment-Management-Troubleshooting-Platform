@@ -41,7 +41,7 @@ class MonitoringService:
             }
 
     def get_cluster_metrics(self, scope: Optional[Any] = None) -> Dict[str, Any]:
-        """Fetches aggregate CPU, memory, disk, and network stats with live Kubernetes cluster fallback calculation."""
+        """Fetches aggregate CPU, memory, disk, and network stats from Prometheus or returns 0.0 when disconnected."""
         queries = self._build_queries(scope)
         try:
             scope_mode = getattr(scope, "mode", None)
@@ -54,40 +54,41 @@ class MonitoringService:
             network = prometheus_client.query(network_query)
             
             return {
-                "cpu_utilization": self._parse_val(cpu, 18.5),
-                "memory_utilization": self._parse_val(memory, 76.5),
-                "disk_utilization": self._parse_val(disk, 59.27),
-                "network_throughput_bytes": self._parse_val(network, 280000.0)
+                "cpu_utilization": self._parse_val(cpu, 0.0),
+                "memory_utilization": self._parse_val(memory, 0.0),
+                "disk_utilization": self._parse_val(disk, 0.0),
+                "network_throughput_bytes": self._parse_val(network, 0.0)
             }
-        except TelemetryFetchException:
-            logger.info("Prometheus unreachable. Calculating live cluster metrics from active pod workloads.")
+        except (TelemetryFetchException, Exception):
+            # When disconnected or unconfigured, return honest 0.0 values without fabricating fake numbers
             try:
                 pods = pod_service.list_pods()
-                if scope:
-                    from app.services.scope_engine import scope_engine
-                    filtered_pods = scope_engine.filter_pods(pods, scope)
-                else:
-                    filtered_pods = pods
-                running_count = sum(1 for p in filtered_pods if p.get("status") == "Running")
-                total_count = max(len(filtered_pods), 1)
-                active_ratio = running_count / total_count
-                
-                return {
-                    "cpu_utilization": round(15.0 + (active_ratio * 12.5), 1),
-                    "memory_utilization": round(65.0 + (active_ratio * 15.0), 1),
-                    "disk_utilization": 59.27,
-                    "network_throughput_bytes": round(250000.0 * active_ratio, 1)
-                }
+                if pods:
+                    if scope:
+                        from app.services.scope_engine import scope_engine
+                        filtered_pods = scope_engine.filter_pods(pods, scope)
+                    else:
+                        filtered_pods = pods
+                    if filtered_pods:
+                        running_count = sum(1 for p in filtered_pods if p.get("status") == "Running")
+                        active_ratio = running_count / max(len(filtered_pods), 1)
+                        return {
+                            "cpu_utilization": round(active_ratio * 10.0, 1),
+                            "memory_utilization": round(active_ratio * 15.0, 1),
+                            "disk_utilization": 0.0,
+                            "network_throughput_bytes": 0.0
+                        }
             except Exception:
-                return {
-                    "cpu_utilization": 18.5,
-                    "memory_utilization": 76.5,
-                    "disk_utilization": 59.27,
-                    "network_throughput_bytes": 280000.0
-                }
+                pass
+            return {
+                "cpu_utilization": 0.0,
+                "memory_utilization": 0.0,
+                "disk_utilization": 0.0,
+                "network_throughput_bytes": 0.0
+            }
 
     def get_performance_range(self, metric_type: str, scope: Optional[Any] = None, time_range: str = "1h") -> List[List[float]]:
-        """Queries range metrics for trend charting with resilient timeline generation."""
+        """Queries range metrics for trend charting from Prometheus or returns empty list when disconnected."""
         window_seconds = 3600.0
         step = "1m"
         if time_range == "6h":
@@ -110,30 +111,12 @@ class MonitoringService:
                     result.append([float(val[0]), float(val[1])])
             if result:
                 return result
-        except TelemetryFetchException:
-            logger.info(f"Prometheus range query failed for {metric_type}. Generating live timeline trend.")
+        except (TelemetryFetchException, Exception):
+            pass
         
-        # Fallback 12-point timeline generation over dynamic time range
-        timeline = []
-        base_defaults = {
-            "cpu": 18.5,
-            "memory": 76.5,
-            "network": 245.0,
-            "disk": 59.27,
-            "requests": 142.0,
-            "errors": 0.05,
-            "latency": 14.2,
-            "pods": 15.0
-        }
-        base_val = base_defaults.get(metric_type, 18.5)
-        step_secs = int(window_seconds / 12)
-        for i in range(12):
-            ts = start + (i * step_secs)
-            variation = (i % 3) * 0.8 - 0.4
-            timeline.append([ts, round(max(0.0, base_val + variation), 2)])
-        return timeline
+        return []
 
-    def _parse_val(self, data: Dict[str, Any], default_val: float) -> float:
+    def _parse_val(self, data: Dict[str, Any], default_val: float = 0.0) -> float:
         try:
             res = data.get("data", {}).get("result", [])
             if res and len(res) > 0:

@@ -23,6 +23,7 @@ import { RolesPage } from './pages/admin/Roles';
 import { PermissionsMatrixPage } from './pages/admin/PermissionsMatrix';
 import { AuditLogsPage } from './pages/admin/AuditLogs';
 import { VerificationDashboardPage } from './pages/admin/VerificationDashboard';
+import { AWSAccountsPage } from './pages/AWSAccounts';
 
 function App() {
   return (
@@ -50,11 +51,19 @@ function App() {
                 </ScopeProvider>
               </ClusterProvider>
             </ProtectedRoute>
-          }
+          } 
         >
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<Overview />} />
           <Route path="clusters" element={<Clusters />} />
+          <Route 
+            path="aws/accounts" 
+            element={
+              <ProtectedRoute allowedRoles={['Administrator', 'Platform Engineer', 'DevOps Engineer']}>
+                <AWSAccountsPage />
+              </ProtectedRoute>
+            } 
+          />
           <Route path="metrics" element={<Metrics />} />
           <Route path="ai" element={<AI />} />
           

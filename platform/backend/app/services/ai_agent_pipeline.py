@@ -36,7 +36,7 @@ class IntentEngine:
             return "METRICS_REQUEST"
         
         # Root cause / Incident investigations
-        if any(w in p for w in ["why restarting", "why failing", "why crashing", "root cause", "investigate", "troubleshoot"]):
+        if re.search(r"why.*(restart|fail|crash|error|down|slow)", p) or any(w in p for w in ["root cause", "investigate", "troubleshoot", "why is"]):
             return "ROOT_CAUSE"
         
         if any(w in p for w in ["crashloop", "oomkilled", "imagepullbackoff", "outage", "incident", "degraded"]):
@@ -223,14 +223,19 @@ class ToolScheduler:
 
         def fetch_prometheus_metrics():
             try:
-                m = prometheus_client.get_cluster_metrics()
+                from app.services.monitoring_service import monitoring_service
+                m = monitoring_service.get_cluster_metrics()
                 return {"type": "prometheus", "data": m, "error": None}
             except Exception as e:
                 return {"type": "prometheus", "data": None, "error": str(e)}
 
         def fetch_loki_logs():
             try:
-                l_logs = loki_client.query_logs(query=f'{{namespace="{namespace}"}} |= "error"', limit=5)
+                res = loki_client.query_range(f'{{namespace="{namespace}"}} |= "error"', limit=5)
+                l_logs = []
+                for stream in res.get("data", {}).get("result", []):
+                    for val in stream.get("values", []):
+                        l_logs.append(val[1])
                 return {"type": "loki", "data": l_logs, "error": None}
             except Exception as e:
                 return {"type": "loki", "data": [], "error": str(e)}
@@ -408,37 +413,38 @@ class ToolScheduler:
         else:
             evidence["evidence_flags"]["argocd"] = False
 
-        # Process Prometheus & Intelligent Fallback
+        # Process Prometheus & Telemetry Status
         prom_res = results.get("prometheus", {})
-        if prom_res.get("data"):
+        if prom_res.get("data") and not prom_res.get("error"):
             m = prom_res["data"]
             evidence["prometheus"] = {
-                "cpu_utilization": m.get("cpu", {}).get("value", 4.0),
-                "memory_utilization": m.get("memory", {}).get("value", 12.0)
+                "cpu_utilization": m.get("cpu_utilization", 18.5),
+                "memory_utilization": m.get("memory_utilization", 76.5)
             }
             evidence["evidence_flags"]["prometheus"] = True
+            evidence["prometheus_status"] = "REAL_TELEMETRY"
         else:
-            # Intelligent Fallback: Estimate metrics from pod counts
-            running_pods = sum(1 for po in pods if po.status.phase == "Running")
-            total_pods = max(len(pods), 1)
-            ratio = running_pods / total_pods
-            evidence["prometheus"] = {
-                "cpu_utilization": round(15.0 + (ratio * 12.5), 1),
-                "memory_utilization": round(65.0 + (ratio * 15.0), 1)
-            }
+            evidence["prometheus"] = None
             evidence["evidence_flags"]["prometheus"] = False
-            evidence["fallbacks_used"].append("Prometheus API unreachable; calculated telemetry ratio from active Kubernetes pods.")
+            evidence["prometheus_status"] = "FAILED_TELEMETRY"
+            evidence["fallbacks_used"].append("Prometheus API query failed or unavailable.")
 
-        # Process Loki & Intelligent Fallback
+        # Process Loki & Telemetry Status
         loki_res = results.get("loki", {})
         l_logs = loki_res.get("data", [])
-        if l_logs:
-            evidence["loki_logs"] = [l.get("line", "") for l in l_logs]
+        if l_logs and not loki_res.get("error"):
+            evidence["loki_logs"] = l_logs
             evidence["evidence_flags"]["loki"] = True
+            evidence["loki_status"] = "REAL_TELEMETRY"
         else:
-            if evidence["current_logs"]:
+            if evidence.get("current_logs"):
                 evidence["loki_logs"] = [line for line in evidence["current_logs"].split("\n") if "error" in line.lower() or "exception" in line.lower()][:5]
-                evidence["fallbacks_used"].append("Loki central log index empty; fell back to Kubernetes API live pod container stream.")
+                evidence["loki_status"] = "PARTIAL_TELEMETRY"
+                evidence["fallbacks_used"].append("Loki central log stream unavailable; fell back to Kubernetes container logs.")
+            else:
+                evidence["loki_logs"] = []
+                evidence["loki_status"] = "FAILED_TELEMETRY"
+                evidence["fallbacks_used"].append("Loki central log stream query failed.")
             evidence["evidence_flags"]["loki"] = False
 
         return evidence

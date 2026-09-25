@@ -67,6 +67,8 @@ helm-charts/
 .terraform/
 *.tfstate
 *.tfstate.backup
+*.tfplan
+tfplan
 
 # DevOps Nexus specific
 dashboard/frontend/build/

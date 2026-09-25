@@ -119,7 +119,7 @@ async def rollback_argocd_application(
     request_id = getattr(request.state, "request_id", None)
     cluster_id = _get_cluster_id(request)
     user_dict = get_current_user(request)
-    username = user_dict.get("username", "viewer")
+    username = user_dict.get("username") or user_dict.get("sub") or "viewer"
 
     authz_engine.authorize(username, "gitops", "rollback_application", application=app_name)
     try:

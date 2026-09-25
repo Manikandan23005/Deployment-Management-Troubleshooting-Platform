@@ -293,41 +293,61 @@ async def get_verification(request: Request, admin_user: str = Depends(verify_ad
     request_id = getattr(request.state, "request_id", None)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
-    try:
-        from app.clients.kubernetes import k8s_client
-        k8s_client.list_namespaces(cluster_id="default")
-        k8s_health = "Healthy"
-        k8s_msg = "Connected (API Server Healthy)"
-    except Exception as e:
+    from app.services.cluster_registry import cluster_registry
+    has_clusters = len(cluster_registry.list_clusters()) > 0
+
+    if not has_clusters:
         k8s_health = "Degraded"
-        k8s_msg = f"Failed: {str(e)}"
-
-    try:
-        from app.clients.prometheus import prometheus_client
-        prometheus_client.query("up")
-        prom_health = "Healthy"
-        prom_msg = "Active (Ingested CPU/Mem metrics)"
-    except Exception as e:
+        k8s_msg = "Failed: No Kubernetes cluster configured."
         prom_health = "Degraded"
-        prom_msg = f"Failed: {str(e)}"
-
-    try:
-        from app.clients.loki import loki_client
-        loki_client.query_range('{namespace="devops-nexus-prod"}', limit=1)
-        loki_health = "Healthy"
-        loki_msg = "Active (Streaming log lines)"
-    except Exception as e:
+        prom_msg = "Failed: Prometheus unreachable or no active cluster configured."
         loki_health = "Degraded"
-        loki_msg = f"Failed: {str(e)}"
-
-    try:
-        from app.services.argocd_service import argocd_service
-        argocd_service.list_applications(cluster_id="default")
-        argo_health = "Healthy"
-        argo_msg = "Active (Synced Applications state)"
-    except Exception as e:
+        loki_msg = "Failed: Loki logs unreachable or no active cluster configured."
         argo_health = "Degraded"
-        argo_msg = f"Failed: {str(e)}"
+        argo_msg = "Failed: ArgoCD unreachable or no active cluster configured."
+    else:
+        try:
+            from app.clients.kubernetes import k8s_client
+            k8s_client.list_namespaces()
+            k8s_health = "Healthy"
+            k8s_msg = "Connected (API Server Healthy)"
+        except Exception as e:
+            k8s_health = "Degraded"
+            k8s_msg = f"Failed: {str(e)}"
+
+        try:
+            from app.clients.prometheus import prometheus_client
+            prometheus_client.query("up")
+            prom_health = "Healthy"
+            prom_msg = "Active (Ingested CPU/Mem metrics)"
+        except Exception as e:
+            prom_health = "Degraded"
+            prom_msg = f"Failed: {str(e)}"
+
+        try:
+            from app.clients.loki import loki_client
+            if loki_client._check_reachability():
+                loki_health = "Healthy"
+                loki_msg = "Active (Streaming log lines)"
+            else:
+                loki_health = "Degraded"
+                loki_msg = "Failed: Loki logs server unreachable."
+        except Exception as e:
+            loki_health = "Degraded"
+            loki_msg = f"Failed: {str(e)}"
+
+        try:
+            from app.services.argocd_service import argocd_service
+            apps = argocd_service.list_applications()
+            if apps:
+                argo_health = "Healthy"
+                argo_msg = f"Active ({len(apps)} Synced Applications)"
+            else:
+                argo_health = "Degraded"
+                argo_msg = "Failed: No ArgoCD applications found or disconnected."
+        except Exception as e:
+            argo_health = "Degraded"
+            argo_msg = f"Failed: {str(e)}"
 
     subsystems = [
         {
@@ -372,12 +392,12 @@ async def get_verification(request: Request, admin_user: str = Depends(verify_ad
         },
         {
             "name": "Nexus AI Engine",
-            "source": "Pluggable AI Completion Provider",
+            "source": "Groq (Llama 3.3) / Pluggable AI Provider",
             "last_sync": now,
-            "current_value": "Active (Agentic Reasoning pipeline)",
+            "current_value": "Active (DevOps Logs & Metrics Analysis)",
             "validation_status": "VALIDATED",
             "data_age": "1s ago",
-            "tool_used": "ai_agent_pipeline.run_pipeline",
+            "tool_used": "ai_service.chat_troubleshoot",
             "health": "Healthy"
         }
     ]

@@ -1,0 +1,30 @@
+# DevOps Nexus — Production EKS Terraform Variables Example
+
+aws_region         = "ap-south-1"
+environment        = "prod"
+cluster_name       = "devops-nexus-prod"
+kubernetes_version = "1.30"
+
+# Networking Configuration
+vpc_cidr                  = "10.0.0.0/16"
+availability_zones        = ["ap-south-1a", "ap-south-1b"]
+public_subnet_cidrs       = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs      = ["10.0.10.0/24", "10.0.11.0/24"]
+enable_single_nat_gateway = true
+
+# EKS API Endpoint Access
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+# Managed Node Group
+node_instance_types = ["t3.medium"]
+node_capacity_type  = "ON_DEMAND"
+desired_size        = 2
+min_size            = 1
+max_size            = 4
+
+tags = {
+  Project     = "DevOpsNexus"
+  Environment = "prod"
+  ManagedBy   = "Terraform"
+  Owner       = "PlatformEngineering"
+}

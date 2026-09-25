@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import { LogLine } from '../types';
 import { Search, RefreshCw, TerminalSquare, Eye } from 'lucide-react';
-
 import { useScope } from '../context/ScopeContext';
+import { useCluster } from '../context/ClusterContext';
 
 const Logs: React.FC = () => {
   const [podsList, setPodsList] = useState<string[]>([]);
@@ -14,11 +14,18 @@ const Logs: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
   const [liveRefresh, setLiveRefresh] = useState(true);
   const { getScopeParams } = useScope();
-  
+  const { activeCluster, clusters } = useCluster();
+
+  const isConnected = !!activeCluster && clusters.length > 0;
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
   // Load pods list dynamically on mount or scope change
   useEffect(() => {
+    if (!isConnected) {
+      setPodsList([]);
+      setLogs([]);
+      return;
+    }
     api.getPods(undefined, getScopeParams()).then((pods) => {
       const names = pods.map(p => p.name);
       setPodsList(names);
@@ -26,15 +33,21 @@ const Logs: React.FC = () => {
         setSelectedPod(names[0]);
       }
     });
-  }, [JSON.stringify(getScopeParams())]);
+  }, [isConnected, JSON.stringify(getScopeParams())]);
 
   const fetchLogsData = async (silent = false) => {
+    if (!isConnected) {
+      setLogs([]);
+      setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
     try {
       const data = await api.getLogs(selectedPod || 'all', searchTerm || undefined, 100, getScopeParams());
-      setLogs(data);
+      setLogs(data || []);
     } catch (e) {
       console.error(e);
+      setLogs([]);
     } finally {
       setLoading(false);
     }
@@ -42,16 +55,16 @@ const Logs: React.FC = () => {
 
   useEffect(() => {
     fetchLogsData();
-  }, [selectedPod, searchTerm, JSON.stringify(getScopeParams())]);
+  }, [isConnected, selectedPod, searchTerm, JSON.stringify(getScopeParams())]);
 
-  // Live Refresh interval: 3 seconds
+  // Live Refresh interval: 5 seconds (only if connected and pods exist)
   useEffect(() => {
-    if (!liveRefresh || !selectedPod) return;
+    if (!isConnected || !liveRefresh || podsList.length === 0) return;
     const timer = setInterval(() => {
       fetchLogsData(true);
-    }, 3000);
+    }, 5000);
     return () => clearInterval(timer);
-  }, [selectedPod, searchTerm, liveRefresh]);
+  }, [isConnected, selectedPod, searchTerm, liveRefresh, podsList.length]);
 
   // Auto-scroll to latest log lines when logs update
   useEffect(() => {

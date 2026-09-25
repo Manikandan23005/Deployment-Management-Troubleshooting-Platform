@@ -1,0 +1,8 @@
+# Remote S3 Backend Configuration for Prod Environment
+# Usage: terraform init -backend-config=envs/prod/backend.hcl
+
+bucket         = "devops-nexus-tfstate-605294565283"
+key            = "prod/eks/terraform.tfstate"
+region         = "ap-south-1"
+dynamodb_table = "devops-nexus-tflocks"
+encrypt        = true

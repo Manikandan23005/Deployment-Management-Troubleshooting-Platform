@@ -26,12 +26,17 @@ const Namespaces: React.FC = () => {
   const userRole = localStorage.getItem('user_role') || 'Viewer';
   const canOperate = ['Administrator', 'Platform Engineer', 'DevOps Engineer'].includes(userRole);
 
-  const fetchNamespaces = () => {
+  const fetchNamespaces = async () => {
     setLoading(true);
-    api.getNamespaces(getScopeParams()).then((data) => {
-      setNamespaces(data);
+    try {
+      const data = await api.getNamespaces(getScopeParams());
+      setNamespaces(data || []);
+    } catch (e) {
+      console.warn("Failed to load namespaces:", e);
+      setNamespaces([]);
+    } finally {
       setLoading(false);
-    });
+    }
   };
 
   useEffect(() => {

@@ -5,10 +5,11 @@ from kubernetes import client, config
 from shared.exceptions import KubernetesClientException
 from app.core.logging import logger
 
+from app.clients.k8s_factory import k8s_client_factory
 from app.services.cluster_registry import cluster_registry
 
 class KubernetesClient:
-    """Manages low-level connections and queries across multiple Kubernetes API clusters."""
+    """Manages low-level connections and queries across multiple Kubernetes API clusters (On-Premises & Amazon EKS)."""
     def __init__(self):
         self._initialized = True
         self.v1 = None
@@ -16,8 +17,8 @@ class KubernetesClient:
         self.networking_v1 = None
 
     def get_clients(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
-        """Resolves dynamic API clients for target cluster_id."""
-        return cluster_registry.get_k8s_clients(cluster_id)
+        """Resolves dynamic API clients for target cluster_id through environment-aware client factory."""
+        return k8s_client_factory.get_clients(cluster_id)
 
     # CoreV1 Mappings
     def list_namespaces(self, cluster_id: Optional[str] = None) -> List[Any]:

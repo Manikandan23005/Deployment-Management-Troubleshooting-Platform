@@ -63,7 +63,19 @@ class ClusterRegistryService:
                     logger.debug(f"Kubeconfig scan on {kpath} skipped: {str(e)}")
 
     def _auto_register_local_minikube(self):
-        """Auto-detects local Minikube kubeconfig and registers it as 'Local Development'."""
+        """Auto-detects local Minikube kubeconfig and registers it as 'Local Development' only if local config exists."""
+        kpath = os.path.expanduser("~/.kube/config")
+        if not (os.path.exists(kpath) and os.path.isfile(kpath)):
+            return
+
+        try:
+            with open(kpath, "r") as f:
+                content = f.read()
+            if "minikube" not in content.lower():
+                return
+        except Exception:
+            return
+
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         minikube_cluster = {
             "id": "cluster-minikube-local",
@@ -217,14 +229,14 @@ class ClusterRegistryService:
                 return c
         return None
 
-    def get_default_cluster(self) -> Dict[str, Any]:
+    def get_default_cluster(self) -> Optional[Dict[str, Any]]:
         clusters = self.list_clusters()
         for c in clusters:
             if c.get("is_default"):
                 return c
         if clusters:
             return clusters[0]
-        return self._memory_clusters.get("cluster-minikube-local", {})
+        return None
 
     def add_cluster(self, data: Dict[str, Any]) -> Dict[str, Any]:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -338,7 +350,10 @@ class ClusterRegistryService:
         else:
             cluster = self.get_cluster(cluster_id) or self.get_default_cluster()
 
-        cid = cluster["id"]
+        if not cluster:
+            raise KubernetesClientException("No Kubernetes cluster configured.")
+
+        cid = cluster.get("id", "default")
         if cid in self._api_client_cache:
             return self._api_client_cache[cid]
 
@@ -372,14 +387,6 @@ class ClusterRegistryService:
             return clients
         except Exception as e:
             logger.warning(f"Failed to initialize Kubernetes API client for cluster '{cid}': {str(e)}")
-            # Fallback to default client
-            api_client = client.ApiClient()
-            clients = {
-                "v1": client.CoreV1Api(api_client),
-                "apps_v1": client.AppsV1Api(api_client),
-                "networking_v1": client.NetworkingV1Api(api_client),
-                "cluster": cluster
-            }
-            return clients
+            raise KubernetesClientException(f"Failed to initialize Kubernetes API client for cluster '{cid}': {str(e)}")
 
 cluster_registry = ClusterRegistryService()

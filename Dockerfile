@@ -15,12 +15,12 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y curl build-essential git \
     && curl -sSL https://install.python-poetry.org | python3 -
 
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml ./
 COPY platform/backend/README.md ./platform/backend/
 COPY platform/shared ./platform/shared
 
-# Install runtime dependencies only
-RUN poetry install --only main --no-root
+# Generate updated lock and install runtime dependencies
+RUN poetry lock && poetry install --only main --no-root
 
 # --- Runtime Stage ---
 FROM python:3.13-slim AS runner

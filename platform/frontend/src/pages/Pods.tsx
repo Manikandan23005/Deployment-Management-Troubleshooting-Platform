@@ -35,12 +35,17 @@ const Pods: React.FC = () => {
   const userRole = localStorage.getItem('user_role') || 'Viewer';
   const canOperate = ['Administrator', 'Platform Engineer', 'DevOps Engineer'].includes(userRole);
 
-  const loadPods = () => {
+  const loadPods = async () => {
     setLoading(true);
-    api.getPods(undefined, getScopeParams()).then((data) => {
-      setPods(data);
+    try {
+      const data = await api.getPods(undefined, getScopeParams());
+      setPods(data || []);
+    } catch (e) {
+      console.warn("Failed to load pods:", e);
+      setPods([]);
+    } finally {
       setLoading(false);
-    });
+    }
   };
 
   useEffect(() => {

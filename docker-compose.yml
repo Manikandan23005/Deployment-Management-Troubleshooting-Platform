@@ -1,44 +1,6 @@
+version: "3.8"
+
 services:
-  platform-backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    network_mode: "host"
-    environment:
-      - PORT=8000
-      - AI_PROVIDER=groq
-      - POSTGRES_HOST=localhost
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=devops_nexus
-      - DATABASE_URL=postgresql://postgres:postgres@localhost:5432/devops_nexus
-    env_file:
-      - .env
-    volumes:
-      - ./platform/backend/app:/app/app
-      - ./platform/shared:/app/platform/shared
-      - /home/satoru/.kube:/root/.kube
-      - /home/satoru/.minikube:/home/satoru/.minikube
-    depends_on:
-      - postgres
-      - redis
-
-  platform-frontend:
-    # --- Vite React App Server stub ---
-    build:
-      context: ./platform/frontend
-      dockerfile: ../../applications/frontend/Dockerfile # Reuse node builder logic
-    command: npm run dev -- --host --port 3000
-    ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    volumes:
-      - ./platform/frontend:/app
-      - /app/node_modules
-
   postgres:
     image: postgres:16-alpine
     container_name: devops-nexus-postgres
@@ -51,12 +13,65 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: devops-nexus-redis
+    restart: always
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  platform-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devops-nexus-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - LOG_LEVEL=info
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=devops_nexus
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/devops_nexus
+      - REDIS_URL=redis://redis:6379/0
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-DevOpsNexus@123}
+      - AWS_REGION=${AWS_REGION:-ap-south-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  platform-frontend:
+    build:
+      context: ./platform/frontend
+      dockerfile: Dockerfile
+    container_name: devops-nexus-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - platform-backend
 
 volumes:
   postgres_data:

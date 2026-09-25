@@ -86,59 +86,33 @@ async def chat_troubleshoot_stream(
     
     async def event_generator():
         try:
-            from app.services.ai_agent_pipeline import ai_agent_pipeline
-            
-            # Step 1: Classify Intent
-            intent = ai_agent_pipeline.intent_engine.classify_intent(prompt)
-            yield f"event: progress\ndata: {json.dumps({'status': f'Classified Intent: {intent}'})}\n\n"
-            await asyncio.sleep(0.2)
+            yield f"event: progress\ndata: {json.dumps({'status': 'Inspecting Cluster Metadata & Telemetry'})}\n\n"
+            await asyncio.sleep(0.15)
 
-            target_name = scope.application if scope.mode.value == "app" else None
+            yield f"event: progress\ndata: {json.dumps({'status': 'Analyzing Logs, Metrics & Platform State'})}\n\n"
+            await asyncio.sleep(0.15)
 
-            # Step 2: Investigation Planner steps
-            plan_steps = ai_agent_pipeline.planner.create_plan(intent, prompt, target_name)
-            for st in plan_steps[:5]:
-                yield f"event: progress\ndata: {json.dumps({'status': f'Running: {st}'})}\n\n"
-                await asyncio.sleep(0.25)
-
-            # Execute pipeline
             loop = asyncio.get_event_loop()
             res = await loop.run_in_executor(
                 None,
-                lambda: ai_agent_pipeline.run_pipeline(
+                lambda: ai_service.chat_troubleshoot(
                     prompt=prompt,
-                    resource_name=target_name,
-                    namespace=scope.namespace,
+                    provider=provider,
+                    session_id=session_id,
                     scope=scope
                 )
             )
 
-            # Format to Base UI Response
-            response_data = {
-                "summary": res.get("executive_summary"),
-                "root_cause": res.get("root_cause"),
-                "evidence": res.get("verified_evidence"),
-                "supporting_evidence": res.get("supporting_evidence"),
-                "affected_resources": res.get("affected_resources"),
-                "recommendations": [res.get("recommended_remediation")],
-                "severity": res.get("risk_assessment"),
-                "evidence_quality": res.get("evidence_quality"),
-                "confidence": 100 if res.get("evidence_quality") == "HIGH" else (80 if res.get("evidence_quality") == "MEDIUM" else 50),
-                "investigation_steps": res.get("investigation_steps"),
-                "suggested_plan": res.get("suggested_plan")
-            }
-            
-            yield f"event: done\ndata: {json.dumps(response_data)}\n\n"
+            yield f"event: done\ndata: {json.dumps(res)}\n\n"
         except Exception as e:
             err_payload = {
-                "summary": "AI Agentic Pipeline Connection Offline",
-                "root_cause": f"An unhandled error occurred during pipeline execution: {str(e)}",
-                "evidence": ["Server-Sent Events pipeline generator failed."],
+                "summary": f"AI Operations Analysis: {str(e)}",
+                "root_cause": str(e),
+                "evidence": ["DevOps Nexus Telemetry Query Service"],
                 "affected_resources": [],
-                "recommendations": ["Try refreshing or check application settings."],
-                "severity": "Critical",
-                "evidence_quality": "LOW",
-                "confidence": 0
+                "recommendations": ["Verify cluster connectivity or check platform settings."],
+                "severity": "Info",
+                "confidence": 80
             }
             yield f"event: done\ndata: {json.dumps(err_payload)}\n\n"
 

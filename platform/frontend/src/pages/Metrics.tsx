@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { Loading } from '../components/Loading';
 import { useScope } from '../context/ScopeContext';
-import { Cpu, HardDrive, Activity, Wifi, Layers, Clock, AlertTriangle, RefreshCw, BarChart3, Radio } from 'lucide-react';
+import { useCluster } from '../context/ClusterContext';
+import { Cpu, HardDrive, Activity, Wifi, Layers, Clock, AlertTriangle, RefreshCw, BarChart3, Radio, Server, Cloud, Plus } from 'lucide-react';
 
 interface MetricChartConfig {
   id: string;
@@ -18,12 +20,27 @@ interface MetricChartConfig {
 const Metrics: React.FC = () => {
   const [metricsData, setMetricsData] = useState<Record<string, any[]>>({});
   const [summaryStats, setSummaryStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'compute' | 'network' | 'http' | 'scaling'>('all');
   const [timeRange, setTimeRange] = useState<'1h' | '6h' | '24h'>('1h');
   const { getScopeParams, getScopeLabel } = useScope();
+  const { activeCluster, clusters } = useCluster();
+
+  const isConnected = !!activeCluster && clusters.length > 0;
 
   const fetchAllMetrics = async () => {
+    if (!isConnected) {
+      setMetricsData({});
+      setSummaryStats({
+        cpu_utilization: 0.0,
+        memory_utilization: 0.0,
+        disk_utilization: 0.0,
+        network_throughput_bytes: 0.0
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       const scope = { ...getScopeParams(), time_range: timeRange };
       const [
@@ -53,9 +70,10 @@ const Metrics: React.FC = () => {
 
   useEffect(() => {
     fetchAllMetrics();
-    const interval = setInterval(fetchAllMetrics, 3000);
+    if (!isConnected) return;
+    const interval = setInterval(fetchAllMetrics, 5000);
     return () => clearInterval(interval);
-  }, [JSON.stringify(getScopeParams()), timeRange]);
+  }, [isConnected, JSON.stringify(getScopeParams()), timeRange]);
 
   const chartConfigs: MetricChartConfig[] = [
     {
@@ -235,10 +253,15 @@ const Metrics: React.FC = () => {
 
           <button
             onClick={fetchAllMetrics}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-white transition-colors flex items-center gap-1 text-xs font-semibold"
+            disabled={!isConnected}
+            className={`p-2 rounded-xl border transition-colors flex items-center gap-1.5 text-xs font-semibold ${
+              isConnected
+                ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-300 hover:text-white cursor-pointer'
+                : 'bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
           >
-            <RefreshCw className="h-3.5 w-3.5 animate-spin-slow" />
-            <span>Live Sync (3s)</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${isConnected ? 'animate-spin-slow' : ''}`} />
+            <span>{isConnected ? 'Live Sync (5s)' : 'Disconnected'}</span>
           </button>
         </div>
       </div>
@@ -251,10 +274,10 @@ const Metrics: React.FC = () => {
             <Cpu className="h-4 w-4 text-blue-500" />
           </div>
           <div className="text-xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {summaryStats?.cpu_utilization || getLatestVal(metricsData.cpu)}%
+            {isConnected ? (summaryStats?.cpu_utilization || getLatestVal(metricsData.cpu)) : 0.0}%
           </div>
-          <div className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
-            <Radio className="h-2.5 w-2.5 animate-pulse" /> Prometheus Active Scraper
+          <div className={`text-[10px] font-semibold flex items-center gap-1 ${isConnected ? 'text-emerald-500' : 'text-slate-500'}`}>
+            <Radio className={`h-2.5 w-2.5 ${isConnected ? 'animate-pulse' : ''}`} /> {isConnected ? 'Prometheus Active Scraper' : 'Cluster Offline'}
           </div>
         </div>
 
@@ -264,10 +287,10 @@ const Metrics: React.FC = () => {
             <HardDrive className="h-4 w-4 text-purple-500" />
           </div>
           <div className="text-xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {summaryStats?.memory_utilization || getLatestVal(metricsData.memory)}%
+            {isConnected ? (summaryStats?.memory_utilization || getLatestVal(metricsData.memory)) : 0.0}%
           </div>
-          <div className="text-[10px] text-indigo-400 font-semibold">
-            Avg: {getAvgVal(metricsData.memory)}% (1h)
+          <div className="text-[10px] text-slate-400 font-semibold">
+            {isConnected ? `Avg: ${getAvgVal(metricsData.memory)}% (1h)` : 'No active cluster'}
           </div>
         </div>
 
@@ -277,10 +300,10 @@ const Metrics: React.FC = () => {
             <Wifi className="h-4 w-4 text-cyan-500" />
           </div>
           <div className="text-xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {roundVal(getLatestVal(metricsData.network))} KB/s
+            {isConnected ? roundVal(getLatestVal(metricsData.network)) : 0.0} KB/s
           </div>
-          <div className="text-[10px] text-cyan-400 font-semibold">
-            Rx & Tx Throughput
+          <div className="text-[10px] text-slate-400 font-semibold">
+            {isConnected ? 'Rx & Tx Throughput' : 'No active cluster'}
           </div>
         </div>
 
@@ -290,10 +313,10 @@ const Metrics: React.FC = () => {
             <Clock className="h-4 w-4 text-pink-500" />
           </div>
           <div className="text-xl font-extrabold text-slate-800 dark:text-white font-mono">
-            {roundVal(getLatestVal(metricsData.latency))} ms
+            {isConnected ? roundVal(getLatestVal(metricsData.latency)) : 0.0} ms
           </div>
-          <div className="text-[10px] text-emerald-500 font-semibold">
-            99.9% Availability
+          <div className={`text-[10px] font-semibold ${isConnected ? 'text-emerald-500' : 'text-slate-500'}`}>
+            {isConnected ? '99.9% Availability' : 'No telemetry stream'}
           </div>
         </div>
       </div>
@@ -321,72 +344,103 @@ const Metrics: React.FC = () => {
         ))}
       </div>
 
-      {/* Metric Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredCharts.map(chart => {
-          const Icon = chart.icon;
-          const paths = generateSvgPath(chart.data, 400, 180);
-          const currentVal = getLatestVal(chart.data);
-          const avgVal = getAvgVal(chart.data);
-
-          return (
-            <div 
-              key={chart.id}
-              className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm space-y-3"
+      {/* Empty State Banner if not connected */}
+      {!isConnected ? (
+        <div className="p-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 text-center space-y-4">
+          <div className="h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
+            <BarChart3 className="h-6 w-6" />
+          </div>
+          <div className="space-y-1 max-w-md mx-auto">
+            <h3 className="text-base font-bold text-slate-800 dark:text-white">No Cluster Telemetry Available</h3>
+            <p className="text-xs text-slate-400">
+              There is currently no active Kubernetes cluster or AWS EKS account connected. Register an AWS account to discover your EKS clusters or add a cluster directly.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Link
+              to="/aws/accounts"
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${chart.color}20`, color: chart.color }}>
-                    <Icon className="h-4 w-4" />
+              <Cloud className="h-3.5 w-3.5" />
+              Register AWS Account
+            </Link>
+            <Link
+              to="/clusters"
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5"
+            >
+              <Server className="h-3.5 w-3.5" />
+              Add Cluster
+            </Link>
+          </div>
+        </div>
+      ) : (
+        /* Metric Charts Grid */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {filteredCharts.map(chart => {
+            const Icon = chart.icon;
+            const paths = generateSvgPath(chart.data, 400, 180);
+            const currentVal = getLatestVal(chart.data);
+            const avgVal = getAvgVal(chart.data);
+
+            return (
+              <div 
+                key={chart.id}
+                className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${chart.color}20`, color: chart.color }}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white">
+                      {chart.title}
+                    </span>
                   </div>
-                  <span className="text-xs font-bold text-slate-800 dark:text-white">
-                    {chart.title}
-                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-slate-400">
+                      Avg: <strong>{avgVal}{chart.unit}</strong>
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-xs font-bold font-mono" style={{ backgroundColor: `${chart.color}20`, color: chart.color }}>
+                      {roundVal(currentVal)}{chart.unit}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-slate-400">
-                    Avg: <strong>{avgVal}{chart.unit}</strong>
-                  </span>
-                  <span className="px-2 py-0.5 rounded text-xs font-bold font-mono" style={{ backgroundColor: `${chart.color}20`, color: chart.color }}>
-                    {roundVal(currentVal)}{chart.unit}
-                  </span>
-                </div>
-              </div>
-
-              {/* Chart SVG */}
-              <div className="h-48 border-b border-l border-slate-200 dark:border-slate-800/80 relative p-2 overflow-hidden">
-                {chart.data.length >= 2 ? (
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 400 180" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id={`grad-${chart.id}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={chart.color} stopOpacity="0.35" />
-                        <stop offset="100%" stopColor={chart.color} stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
-                    <path d={paths.area} fill={`url(#grad-${chart.id})`} />
-                    <path 
-                      d={paths.line} 
-                      fill="none" 
-                      stroke={chart.color} 
-                      strokeWidth="2.5" 
-                      strokeLinecap="round"
-                      className="transition-all duration-500" 
-                    />
-                  </svg>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-slate-400">
-                    Collecting data points...
+                {/* Chart SVG */}
+                <div className="h-48 border-b border-l border-slate-200 dark:border-slate-800/80 relative p-2 overflow-hidden">
+                  {chart.data.length >= 2 ? (
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 400 180" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id={`grad-${chart.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={chart.color} stopOpacity="0.35" />
+                          <stop offset="100%" stopColor={chart.color} stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      <path d={paths.area} fill={`url(#grad-${chart.id})`} />
+                      <path 
+                        d={paths.line} 
+                        fill="none" 
+                        stroke={chart.color} 
+                        strokeWidth="2.5" 
+                        strokeLinecap="round"
+                        className="transition-all duration-500" 
+                      />
+                    </svg>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-xs text-slate-400">
+                      Collecting data points...
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                    <Radio className="h-2.5 w-2.5 text-blue-400 animate-pulse" /> Live Prometheus Stream
                   </div>
-                )}
-                <div className="absolute top-2 right-2 text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                  <Radio className="h-2.5 w-2.5 text-blue-400 animate-pulse" /> Live Prometheus Stream
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

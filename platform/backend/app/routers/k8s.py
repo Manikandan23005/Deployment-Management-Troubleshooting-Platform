@@ -12,6 +12,7 @@ from app.services.scope_engine import scope_engine
 from shared.exceptions import KubernetesClientException
 from fastapi import Depends
 from app.dependencies.auth import get_current_user, check_role
+from app.core.logging import logger
 
 router = APIRouter(
     prefix="/api/v1/k8s",
@@ -37,7 +38,8 @@ async def list_namespaces(
         data = scope_engine.filter_namespaces(raw_data, scope)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except KubernetesClientException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.warning(f"Namespace listing graceful fallback (no cluster connected): {str(e)}")
+        return BaseResponse(success=True, data=[], request_id=request_id)
 
 @router.post("/namespaces", response_model=BaseResponse)
 async def create_namespace(request: Request, name: str = Query(..., description="Target namespace identifier.")):
@@ -89,7 +91,8 @@ async def list_nodes(request: Request):
         data = node_service.list_nodes(cluster_id=cluster_id)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except KubernetesClientException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.warning(f"Node listing graceful fallback (no cluster connected): {str(e)}")
+        return BaseResponse(success=True, data=[], request_id=request_id)
 
 @router.get("/pods", response_model=BaseResponse)
 async def list_pods(
@@ -110,7 +113,8 @@ async def list_pods(
         data = scope_engine.filter_pods(raw_pods, scope)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except KubernetesClientException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.warning(f"Pod listing graceful fallback (no cluster connected): {str(e)}")
+        return BaseResponse(success=True, data=[], request_id=request_id)
 
 @router.get("/pods/{namespace}/{pod_name}", response_model=BaseResponse)
 async def describe_pod(
@@ -158,7 +162,8 @@ async def list_deployments(
         data = scope_engine.filter_deployments(raw_deps, scope)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except KubernetesClientException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.warning(f"Deployment listing graceful fallback (no cluster connected): {str(e)}")
+        return BaseResponse(success=True, data=[], request_id=request_id)
 
 from app.services.authz_engine import authz_engine
 from app.services.audit_service import audit_service
@@ -346,4 +351,5 @@ async def list_ingresses(request: Request, namespace: Optional[str] = Query(None
         data = ingress_service.list_ingresses(namespace)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except KubernetesClientException as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.warning(f"Ingress listing graceful fallback (no cluster connected): {str(e)}")
+        return BaseResponse(success=True, data=[], request_id=request_id)

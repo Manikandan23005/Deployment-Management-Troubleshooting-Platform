@@ -58,7 +58,16 @@ class ArgoCDClient:
 
     def _ensure_token(self, cluster_id: Optional[str] = None):
         """Programmatically retrieves credentials from K8s secrets and generates a session token."""
+        try:
+            from app.services.cluster_registry import cluster_registry
+            if not cluster_registry.get_clusters():
+                return
+        except Exception:
+            return
+
         if "Authorization" in self.headers and self.token and self.token != "my-argocd-token-placeholder":
+            return
+        if hasattr(self, "_last_auth_fail") and (time.time() - self._last_auth_fail < 30):
             return
 
         base_url = self._get_base_url(cluster_id)
@@ -72,20 +81,25 @@ class ArgoCDClient:
             password = base64.b64decode(secret.data["password"]).decode("utf-8").strip()
 
             url = f"{base_url}/session"
-            with httpx.Client(verify=False, timeout=3.0) as client:
+            with httpx.Client(verify=False, timeout=0.8) as client:
                 response = client.post(url, json={"username": "admin", "password": password})
                 if response.status_code == 200:
                     self.token = response.json()["token"]
                     self.headers["Authorization"] = f"Bearer {self.token}"
                     logger.info("Successfully auto-authenticated with ArgoCD server.")
                 else:
+                    self._last_auth_fail = time.time()
                     logger.warning(f"ArgoCD session authorization rejected: {response.status_code} - {response.text}")
         except Exception as e:
-            logger.warning(f"ArgoCD client failed to auto-authenticate: {str(e)}")
+            self._last_auth_fail = time.time()
+            logger.debug(f"ArgoCD client auto-auth skipped/failed: {str(e)}")
 
     def _fallback_k8s_crd_applications(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Queries ArgoCD Application Custom Resource Definitions directly from Kubernetes API as a fail-safe fallback."""
         try:
+            from app.services.cluster_registry import cluster_registry
+            if not cluster_registry.get_clusters():
+                return []
             from app.clients.kubernetes import k8s_client
             clients = k8s_client.get_clients(cluster_id)
             v1 = clients.get("v1") if isinstance(clients, dict) else clients[0]
@@ -121,10 +135,13 @@ class ArgoCDClient:
 
     def list_applications(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
+            from app.services.cluster_registry import cluster_registry
+            if not cluster_registry.get_clusters():
+                return []
             self._ensure_token(cluster_id)
             base_url = self._get_base_url(cluster_id)
             url = f"{base_url}/applications"
-            with httpx.Client(headers=self.headers, verify=False, timeout=2.5) as client:
+            with httpx.Client(headers=self.headers, verify=False, timeout=1.0) as client:
                 response = client.get(url)
                 if response.status_code == 200:
                     items = response.json().get("items", [])

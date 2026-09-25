@@ -7,6 +7,7 @@ import { AppInfo } from '../types';
 import { Shield, Cpu, Layers, GitBranch, RefreshCw, GitCommit } from 'lucide-react';
 
 import { useScope } from '../context/ScopeContext';
+import { useCluster } from '../context/ClusterContext';
 
 const Overview: React.FC = () => {
   const [apps, setApps] = useState<AppInfo[]>([]);
@@ -16,6 +17,9 @@ const Overview: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const { getScopeParams, getScopeLabel } = useScope();
+  const { activeCluster, clusters } = useCluster();
+
+  const isConnected = !!activeCluster && clusters.length > 0;
 
   const fetchDashboardData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -23,14 +27,21 @@ const Overview: React.FC = () => {
     
     try {
       const scopeParams = getScopeParams();
-      const [appsData, metricsData, gitData] = await Promise.all([
-        api.getApplications(scopeParams),
-        api.getClusterMetrics(scopeParams),
-        api.getGitHubDetails()
-      ]);
-      setApps(appsData);
-      setMetrics(metricsData);
-      setGitDetails(gitData);
+      if (!isConnected) {
+        const gitData = await api.getGitHubDetails();
+        setApps([]);
+        setMetrics({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
+        setGitDetails(gitData);
+      } else {
+        const [appsData, metricsData, gitData] = await Promise.all([
+          api.getApplications(scopeParams),
+          api.getClusterMetrics(scopeParams),
+          api.getGitHubDetails()
+        ]);
+        setApps(appsData || []);
+        setMetrics(metricsData || { cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
+        setGitDetails(gitData);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -41,15 +52,16 @@ const Overview: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [JSON.stringify(getScopeParams())]);
+  }, [isConnected, JSON.stringify(getScopeParams())]);
 
-  // Real-time auto-refresh interval: 5 seconds
+  // Real-time auto-refresh interval: 10 seconds (only if cluster is connected)
   useEffect(() => {
+    if (!isConnected) return;
     const timer = setInterval(() => {
       fetchDashboardData(true);
-    }, 5000);
+    }, 10000);
     return () => clearInterval(timer);
-  }, [JSON.stringify(getScopeParams())]);
+  }, [isConnected, JSON.stringify(getScopeParams())]);
 
   const appColumns = [
     { header: 'Workload', accessor: 'name' as const },
@@ -145,17 +157,23 @@ const Overview: React.FC = () => {
           </div>
 
           <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {gitDetails.latest_commits.map((commit: any, idx: number) => (
-              <div key={idx} className="py-3.5 flex items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 line-clamp-1">{commit.message}</p>
-                  <p className="text-xs text-slate-400">Author: {commit.author}</p>
+            {gitDetails.latest_commits.length > 0 ? (
+              gitDetails.latest_commits.map((commit: any, idx: number) => (
+                <div key={idx} className="py-3.5 flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 line-clamp-1">{commit.message}</p>
+                    <p className="text-xs text-slate-400">Author: {commit.author}</p>
+                  </div>
+                  <span className="font-mono text-xs px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-blue-500">
+                    {commit.sha}
+                  </span>
                 </div>
-                <span className="font-mono text-xs px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-blue-500">
-                  {commit.sha}
-                </span>
+              ))
+            ) : (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No recent Git repository commits found.
               </div>
-            ))}
+            )}
           </div>
         </div>
 

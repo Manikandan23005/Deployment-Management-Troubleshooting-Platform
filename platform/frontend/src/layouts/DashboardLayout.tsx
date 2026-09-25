@@ -3,13 +3,12 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, GitBranch, Cpu, Layers, BarChart3, 
   Terminal, AlertTriangle, Bot, Settings, Sun, Moon, Menu, X, TerminalSquare, Server,
-  Users, Shield, Grid, ShieldAlert, Search, Command, ShieldCheck
+  Users, Shield, Grid, ShieldAlert, Search, Command, ShieldCheck, Cloud
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useScope, ScopeMode, InfrastructureDomain } from '../context/ScopeContext';
 
 import { ClusterSelector } from '../components/ClusterSelector';
-import { AICopilotDrawer } from '../components/AICopilotDrawer';
 import { ResourceContextMenu } from '../components/ResourceContextMenu';
 import { CommandPalette } from '../components/CommandPalette';
 
@@ -57,6 +56,7 @@ const DashboardLayout: React.FC = () => {
     allNavItems = [
       { path: '/overview', label: 'Dashboard', icon: LayoutDashboard },
       { path: '/clusters', label: 'Clusters', icon: Server },
+      { path: '/aws/accounts', label: 'AWS Accounts', icon: Cloud },
       { path: '/ai', label: 'AI Operations', icon: Bot },
       { path: '/deployments', label: 'Deployments', icon: GitBranch },
       { path: '/pods', label: 'Pods', icon: Cpu },
@@ -76,6 +76,7 @@ const DashboardLayout: React.FC = () => {
     allNavItems = [
       { path: '/overview', label: 'Dashboard', icon: LayoutDashboard },
       { path: '/clusters', label: 'Clusters', icon: Server },
+      { path: '/aws/accounts', label: 'AWS Accounts', icon: Cloud },
       { path: '/ai', label: 'AI Operations', icon: Bot },
       { path: '/deployments', label: 'Deployments', icon: GitBranch },
       { path: '/pods', label: 'Pods', icon: Cpu },
@@ -302,9 +303,6 @@ const DashboardLayout: React.FC = () => {
             <Outlet />
           </ResourceContextMenu>
         </main>
-
-        {/* Global Floating AI Copilot Drawer */}
-        <AICopilotDrawer />
 
         {/* Spotlight Command Palette Modal */}
         <CommandPalette isOpen={cmdPaletteOpen} onClose={() => setCmdPaletteOpen(false)} />

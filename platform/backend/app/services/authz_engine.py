@@ -51,9 +51,14 @@ class AuthzEngine:
         res_matrix = role.permissions.get(resource, {})
         allowed = res_matrix.get(action, False)
         if not allowed:
-            # Check fallback action mappings (e.g. view action mapped to resource view)
+            # Check fallback action mappings
             if action not in ["view", "create", "update", "delete"]:
-                allowed = res_matrix.get("update", False) or res_matrix.get("view", False)
+                if any(m in action for m in ["scale", "restart", "sync", "rollback", "edit", "exec", "mutate"]):
+                    allowed = res_matrix.get("update", False)
+                elif any(m in action for m in ["delete", "remove"]):
+                    allowed = res_matrix.get("delete", False)
+                else:
+                    allowed = res_matrix.get("view", False)
         
         if not allowed:
             raise AuthorizationException(

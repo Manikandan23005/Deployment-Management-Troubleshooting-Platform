@@ -319,6 +319,15 @@ export const api = {
     const url = `${baseUrl}/api/v1/ai/chat/stream?${params.toString()}`;
     const eventSource = new EventSource(url);
 
+    let completed = false;
+    const timeoutId = setTimeout(() => {
+      if (!completed) {
+        completed = true;
+        onError(new Error("AI Diagnostic request timed out. Infrastructure connection offline."));
+        eventSource.close();
+      }
+    }, 20000);
+
     eventSource.addEventListener('progress', (e: any) => {
       try {
         const payload = JSON.parse(e.data);
@@ -329,6 +338,8 @@ export const api = {
     });
 
     eventSource.addEventListener('done', (e: any) => {
+      completed = true;
+      clearTimeout(timeoutId);
       try {
         const payload = JSON.parse(e.data);
         // Map keys to match TS expectations if they differ
@@ -346,11 +357,17 @@ export const api = {
     });
 
     eventSource.onerror = (err) => {
-      onError(err);
-      eventSource.close();
+      if (!completed) {
+        completed = true;
+        clearTimeout(timeoutId);
+        onError(new Error("AI stream disconnected. Please verify backend connection."));
+        eventSource.close();
+      }
     };
 
     return () => {
+      completed = true;
+      clearTimeout(timeoutId);
       eventSource.close();
     };
   },
@@ -653,5 +670,36 @@ export const api = {
   inspectContext: async (namespace?: string): Promise<any> => {
     const response = await apiClient.get(`/api/v1/ai/context/inspect?namespace=${namespace || 'devops-nexus-prod'}`);
     return response.data?.data;
+  },
+
+  // --- Phase 5 AWS & Amazon EKS Integration Endpoints ---
+  getAWSAccounts: async (): Promise<any> => {
+    return apiClient.get('/api/v1/aws/accounts');
+  },
+
+  getAWSAccount: async (accountId: string): Promise<any> => {
+    return apiClient.get(`/api/v1/aws/accounts/${accountId}`);
+  },
+
+  registerAWSAccount: async (payload: { name: string; account_id: string; role_arn: string; default_region?: string }): Promise<any> => {
+    return apiClient.post('/api/v1/aws/accounts', payload);
+  },
+
+  deleteAWSAccount: async (accountId: string): Promise<any> => {
+    return apiClient.delete(`/api/v1/aws/accounts/${accountId}`);
+  },
+
+  testAWSAccountConnection: async (accountId: string): Promise<any> => {
+    return apiClient.post(`/api/v1/aws/accounts/${accountId}/test`);
+  },
+
+  discoverEKSClusters: async (accountId: string, region?: string): Promise<any> => {
+    const params = region ? `?region=${encodeURIComponent(region)}` : '';
+    return apiClient.get(`/api/v1/aws/accounts/${accountId}/clusters${params}`);
+  },
+
+  registerEKSClusterTarget: async (accountId: string, clusterName: string): Promise<any> => {
+    return apiClient.post(`/api/v1/aws/accounts/${accountId}/clusters/${encodeURIComponent(clusterName)}/register`);
   }
 };
+

@@ -28,6 +28,11 @@ class PlatformSettings(BaseSettings):
     # Caching
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # AWS Account Defaults (Persistent Connection)
+    DEFAULT_AWS_ACCOUNT_ID: str = "605294565283"
+    DEFAULT_AWS_ROLE_ARN: str = "arn:aws:iam::605294565283:role/DevOpsNexusAccessRole"
+    DEFAULT_AWS_REGION: str = "ap-south-1"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

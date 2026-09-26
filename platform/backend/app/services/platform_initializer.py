@@ -22,6 +22,41 @@ class PlatformInitializer:
         except Exception as e:
             logger.warning(f"Cluster registry auto-registration warning: {str(e)}")
 
+        # 1.5. Ensure Persistent AWS Account & EKS Cluster Target Connection
+        try:
+            from app.aws.account_registry import aws_account_registry
+            from app.aws.models import AWSAccountRegistrationRequest
+            from app.core.settings import settings
+
+            default_acc_id = getattr(settings, "DEFAULT_AWS_ACCOUNT_ID", "605294565283")
+            default_role_arn = getattr(settings, "DEFAULT_AWS_ROLE_ARN", "arn:aws:iam::605294565283:role/DevOpsNexusAccessRole")
+            default_region = getattr(settings, "DEFAULT_AWS_REGION", "ap-south-1")
+
+            acc = aws_account_registry.get_account(default_acc_id)
+            if not acc:
+                req = AWSAccountRegistrationRequest(
+                    name="Production AWS",
+                    account_id=default_acc_id,
+                    role_arn=default_role_arn,
+                    default_region=default_region
+                )
+                acc = aws_account_registry.register_account(req)
+                logger.info(f"✅ Registered persistent AWS account {default_acc_id} ({default_role_arn}).")
+
+            # Register/link EKS cluster target
+            try:
+                aws_account_registry.register_eks_cluster_as_target(
+                    acc.id if acc else default_acc_id,
+                    "devops-nexus-prod",
+                    region=default_region,
+                    is_default=True
+                )
+                logger.info("✅ Linked persistent EKS cluster 'devops-nexus-prod' as active target.")
+            except Exception as cluster_err:
+                logger.debug(f"EKS target auto-link note: {str(cluster_err)}")
+        except Exception as aws_err:
+            logger.warning(f"Persistent AWS account initialization note: {str(aws_err)}")
+
         # 2. Ensure Prometheus NodePort 30090 Exposure
         self._ensure_prometheus_nodeport()
 

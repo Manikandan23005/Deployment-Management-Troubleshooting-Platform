@@ -25,8 +25,26 @@ class AWSAccountRegistryService:
         self._seed_default_accounts()
 
     def _seed_default_accounts(self):
-        """Initializes default reference accounts if configured in environment."""
-        pass
+        """Initializes default reference accounts if configured in environment or settings."""
+        try:
+            from app.core.settings import settings
+            default_acc_id = getattr(settings, "DEFAULT_AWS_ACCOUNT_ID", "605294565283")
+            default_role_arn = getattr(settings, "DEFAULT_AWS_ROLE_ARN", "arn:aws:iam::605294565283:role/DevOpsNexusAccessRole")
+            default_region = getattr(settings, "DEFAULT_AWS_REGION", "ap-south-1")
+
+            if default_acc_id and default_role_arn:
+                account = AWSAccount(
+                    id=f"aws-prod-{default_acc_id}",
+                    name="Production AWS",
+                    account_id=default_acc_id,
+                    role_arn=default_role_arn,
+                    default_region=default_region,
+                    status=AWSAccountStatus.CONNECTED
+                )
+                self._accounts[account.id] = account
+                self._accounts[account.account_id] = account
+        except Exception as e:
+            logger.debug(f"Default AWS account seeding note: {str(e)}")
 
     def register_account(self, request: AWSAccountRegistrationRequest, username: str = "admin") -> AWSAccount:
         """Registers a new AWS account with role ARN validation."""

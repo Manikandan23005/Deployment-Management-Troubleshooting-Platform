@@ -27,23 +27,31 @@ const Overview: React.FC = () => {
     
     try {
       const scopeParams = getScopeParams();
-      if (!isConnected) {
-        const gitData = await api.getGitHubDetails();
-        setApps([]);
-        setMetrics({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
-        setGitDetails(gitData);
-      } else {
-        const [appsData, metricsData, gitData] = await Promise.all([
-          api.getApplications(scopeParams),
-          api.getClusterMetrics(scopeParams),
-          api.getGitHubDetails()
-        ]);
-        setApps(appsData || []);
-        setMetrics(metricsData || { cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
-        setGitDetails(gitData);
-      }
+      
+      const appsPromise = isConnected 
+        ? api.getApplications(scopeParams).catch(() => []) 
+        : Promise.resolve([]);
+      const metricsPromise = isConnected 
+        ? api.getClusterMetrics(scopeParams).catch(() => ({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 }))
+        : Promise.resolve({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
+      const gitPromise = api.getGitHubDetails().catch(() => ({
+        owner: 'Manikandan23005',
+        repository: 'Deployment-Management-Troubleshooting-Platform',
+        branches: ['main'],
+        latest_commits: []
+      }));
+
+      const [appsData, metricsData, gitData] = await Promise.all([
+        appsPromise,
+        metricsPromise,
+        gitPromise
+      ]);
+
+      setApps(appsData || []);
+      setMetrics(metricsData || { cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
+      setGitDetails(gitData || { owner: 'Manikandan23005', repository: 'Deployment-Management-Troubleshooting-Platform', branches: ['main'], latest_commits: [] });
     } catch (e) {
-      console.error(e);
+      console.error("Dashboard fetch error:", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -52,6 +60,11 @@ const Overview: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    // Safety fallback: ensure loading spinner never blocks for more than 2 seconds
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+    return () => clearTimeout(safetyTimer);
   }, [isConnected, JSON.stringify(getScopeParams())]);
 
   // Real-time auto-refresh interval: 10 seconds (only if cluster is connected)

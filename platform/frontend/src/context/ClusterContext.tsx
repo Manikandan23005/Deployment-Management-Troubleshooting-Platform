@@ -52,6 +52,9 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (selected) {
           setActiveClusterState(selected);
           localStorage.setItem('nexus_active_cluster_id', selected.id);
+        } else if (list.length > 0) {
+          setActiveClusterState(list[0]);
+          localStorage.setItem('nexus_active_cluster_id', list[0].id);
         } else {
           setActiveClusterState(null);
           localStorage.removeItem('nexus_active_cluster_id');
@@ -59,13 +62,11 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
       } else {
         setClusters([]);
         setActiveClusterState(null);
-        localStorage.removeItem('nexus_active_cluster_id');
       }
     } catch (err) {
       console.warn('Failed to load clusters:', err);
       setClusters([]);
       setActiveClusterState(null);
-      localStorage.removeItem('nexus_active_cluster_id');
     } finally {
       setLoading(false);
     }
@@ -78,6 +79,11 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   useEffect(() => {
     refreshClusters();
+    const handleStorage = () => {
+      refreshClusters();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   return (

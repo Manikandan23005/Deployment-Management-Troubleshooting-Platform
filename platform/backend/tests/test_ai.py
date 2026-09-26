@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 
 def test_ai_chat_completions(client):
     mock_pipeline_res = {
-        "executive_summary": "Container Crash Diagnosis",
+        "summary": "Container Crash Diagnosis",
         "root_cause": "OOM Killed due to memory limits",
         "evidence_quality": "HIGH",
         "verified_evidence": ["Pod failed"],
@@ -14,7 +14,7 @@ def test_ai_chat_completions(client):
         "investigation_steps": [],
         "suggested_plan": None
     }
-    with patch("app.services.ai_agent_pipeline.ai_agent_pipeline.run_pipeline", return_value=mock_pipeline_res):
+    with patch("app.services.ai_service.ai_service.chat_troubleshoot", return_value=mock_pipeline_res):
         response = client.post(
             "/api/v1/ai/chat",
             json={"prompt": "why is the container crashing?", "provider": "groq"}

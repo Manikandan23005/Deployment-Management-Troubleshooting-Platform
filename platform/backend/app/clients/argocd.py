@@ -1,6 +1,7 @@
 # --- ArgoCD REST API Client ---
 import httpx
 import base64
+import time
 from typing import List, Dict, Any, Optional
 from app.core.settings import settings
 from app.core.logging import logger
@@ -60,7 +61,7 @@ class ArgoCDClient:
         """Programmatically retrieves credentials from K8s secrets and generates a session token."""
         try:
             from app.services.cluster_registry import cluster_registry
-            if not cluster_registry.get_clusters():
+            if not cluster_registry.list_clusters():
                 return
         except Exception:
             return
@@ -98,7 +99,7 @@ class ArgoCDClient:
         """Queries ArgoCD Application Custom Resource Definitions directly from Kubernetes API as a fail-safe fallback."""
         try:
             from app.services.cluster_registry import cluster_registry
-            if not cluster_registry.get_clusters():
+            if not cluster_registry.list_clusters():
                 return []
             from app.clients.kubernetes import k8s_client
             clients = k8s_client.get_clients(cluster_id)
@@ -136,7 +137,7 @@ class ArgoCDClient:
     def list_applications(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
             from app.services.cluster_registry import cluster_registry
-            if not cluster_registry.get_clusters():
+            if not cluster_registry.list_clusters():
                 return []
             self._ensure_token(cluster_id)
             base_url = self._get_base_url(cluster_id)
@@ -285,7 +286,7 @@ class ArgoCDClient:
             "spec": {
                 "project": "default",
                 "source": {
-                    "repoURL": "https://github.com/Manikandan23005/Microservice-Deployment-Monitoring-Platform.git",
+                    "repoURL": "https://github.com/Manikandan23005/Deployment-Management-Troubleshooting-Platform.git",
                     "targetRevision": "main",
                     "path": repo_path
                 },

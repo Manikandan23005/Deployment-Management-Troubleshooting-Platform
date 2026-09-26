@@ -39,9 +39,9 @@ class ContextBuilder:
             logger.warning(f"Failed to list nodes: {str(e)}")
             return []
 
-    def _get_metrics(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
+    def _get_metrics(self, scope: Optional[Any] = None) -> Dict[str, Any]:
         try:
-            return monitoring_service.get_cluster_metrics(cluster_id=cluster_id)
+            return monitoring_service.get_cluster_metrics(scope=scope)
         except Exception as e:
             logger.warning(f"Failed to get metrics: {str(e)}")
             return {"cpu_utilization": 0.0, "memory_utilization": 0.0, "network_throughput_bytes": 0.0}
@@ -158,9 +158,12 @@ class ContextBuilder:
         aws_accounts = aws_account_registry.list_accounts()
         default_cluster = cluster_registry.get_default_cluster()
 
-        has_connected_cluster = len(clusters_list) > 0
         active_cluster_data = default_cluster or (clusters_list[0] if clusters_list else None)
         active_cid = active_cluster_data.get("id") if isinstance(active_cluster_data, dict) else getattr(current_scope, "cluster_id", None)
+
+        # 2. Kubernetes Metadata Store (Pods, Nodes, Deployments, Namespaces)
+        raw_pods = self._get_pods(cluster_id=active_cid)
+        has_connected_cluster = len(clusters_list) > 0 or len(aws_accounts) > 0 or len(raw_pods) > 0
 
         cluster_info = {
             "is_connected": has_connected_cluster,
@@ -168,20 +171,32 @@ class ContextBuilder:
             "clusters": clusters_list,
             "total_aws_accounts": len(aws_accounts),
             "aws_accounts": [{"id": getattr(a, "id", None), "account_id": getattr(a, "account_id", None), "name": getattr(a, "name", None), "region": getattr(a, "default_region", None), "status": getattr(a.status, "value", str(getattr(a, "status", "")))} for a in aws_accounts],
-            "active_cluster": active_cluster_data or "None (No cluster connected)"
+            "active_cluster": active_cluster_data or ("devops-nexus-prod" if has_connected_cluster else "None (No cluster connected)")
         }
-
-        # 2. Kubernetes Metadata Store (Pods, Nodes, Deployments, Namespaces)
-        raw_pods = self._get_pods(cluster_id=active_cid) if has_connected_cluster else []
         pods = scope_engine.filter_pods(raw_pods, current_scope) if raw_pods else []
+        
+        # Categorize workloads
         running_pods = [p for p in pods if p.get("status") == "Running"]
-        failing_pods = [p for p in pods if p.get("status") in ["CrashLoopBackOff", "Error", "Failed", "OOMKilled"]]
+        failing_pods = [p for p in pods if p.get("status") in ["CrashLoopBackOff", "Error", "Failed", "OOMKilled", "ImagePullBackOff", "ErrImagePull"]]
         pending_pods = [p for p in pods if p.get("status") == "Pending"]
+        
+        gitops_pods = [p for p in pods if p.get("gitopsManaged") is True or p.get("manager") == "ArgoCD" or p.get("namespace") == "devops-nexus-prod"]
+        k8s_managed_pods = [p for p in pods if p not in gitops_pods]
 
         raw_nodes = self._get_nodes(cluster_id=active_cid) if has_connected_cluster else []
         raw_deps = self._get_deployments(cluster_id=active_cid) if has_connected_cluster else []
         deps = scope_engine.filter_deployments(raw_deps, current_scope) if raw_deps else []
+        
+        gitops_deployments = [d for d in deps if d.get("gitopsManaged") is True or d.get("is_gitops") is True or d.get("namespace") == "devops-nexus-prod"]
+        k8s_deployments = [d for d in deps if d not in gitops_deployments]
+        
         raw_ns = self._get_namespaces(cluster_id=active_cid) if has_connected_cluster else []
+
+        # Breakdown by namespace
+        ns_map = {}
+        for p in pods:
+            ns_name = p.get("namespace", "default")
+            ns_map[ns_name] = ns_map.get(ns_name, 0) + 1
 
         # 3. Target Service / Pod Logs Collection
         resolved_service = session_manager.resolve_target_service(session_id, prompt)
@@ -198,11 +213,16 @@ class ContextBuilder:
                             target_ns = p.get("namespace", target_ns)
                             break
                 elif pods:
-                    target_pod_name = pods[0].get("name") or pods[0].get("podName")
-                    target_ns = pods[0].get("namespace", target_ns)
+                    # Prefer failing pod logs if any, else first pod
+                    if failing_pods:
+                        target_pod_name = failing_pods[0].get("name") or failing_pods[0].get("podName")
+                        target_ns = failing_pods[0].get("namespace", target_ns)
+                    else:
+                        target_pod_name = pods[0].get("name") or pods[0].get("podName")
+                        target_ns = pods[0].get("namespace", target_ns)
 
                 if target_pod_name:
-                    targeted_logs = pod_service.get_pod_logs(target_ns, target_pod_name, tail_lines=40)
+                    targeted_logs = pod_service.get_pod_logs(target_ns, target_pod_name, tail_lines=50)
             except Exception as e:
                 targeted_logs = f"Log fetch exception: {str(e)}"
 
@@ -258,14 +278,22 @@ class ContextBuilder:
                 "running_pods_count": len(running_pods),
                 "failing_pods_count": len(failing_pods),
                 "pending_pods_count": len(pending_pods),
-                "pods_sample": [{"name": p.get("name"), "namespace": p.get("namespace"), "status": p.get("status"), "restarts": p.get("restarts", 0)} for p in pods[:12]],
+                "gitops_managed_pods_count": len(gitops_pods),
+                "kubernetes_managed_pods_count": len(k8s_managed_pods),
+                "namespace_distribution": ns_map,
+                "gitops_pods": [{"name": p.get("name"), "namespace": p.get("namespace"), "status": p.get("status"), "deployment": p.get("deploymentName"), "restarts": p.get("restarts", 0), "manager": "ArgoCD"} for p in gitops_pods],
+                "kubernetes_pods": [{"name": p.get("name"), "namespace": p.get("namespace"), "status": p.get("status"), "restarts": p.get("restarts", 0), "manager": "Kubernetes"} for p in k8s_managed_pods],
+                "pods_sample": [{"name": p.get("name"), "namespace": p.get("namespace"), "status": p.get("status"), "restarts": p.get("restarts", 0), "gitopsManaged": p in gitops_pods} for p in pods[:25]],
                 "total_deployments": len(deps),
-                "deployments": [{"name": d.get("name"), "namespace": d.get("namespace"), "replicas": d.get("replicas"), "available": d.get("available_replicas")} for d in deps[:10]],
+                "gitops_deployments_count": len(gitops_deployments),
+                "kubernetes_deployments_count": len(k8s_deployments),
+                "gitops_deployments": [{"name": d.get("name"), "namespace": d.get("namespace"), "replicas": d.get("replicas"), "available": d.get("available_replicas"), "gitops": True} for d in gitops_deployments],
+                "kubernetes_deployments": [{"name": d.get("name"), "namespace": d.get("namespace"), "replicas": d.get("replicas"), "available": d.get("available_replicas"), "gitops": False} for d in k8s_deployments],
                 "namespaces": [n.get("name") if isinstance(n, dict) else n for n in raw_ns[:10]]
             },
             "targeted_logs": targeted_logs if targeted_logs else "No pod logs requested or cluster unconfigured.",
             "metrics": metrics,
-            "gitops_applications": [{"name": a.get("name"), "sync_status": a.get("sync_status"), "health_status": a.get("health_status")} for a in apps[:10]],
+            "gitops_applications": [{"name": a.get("name"), "sync_status": a.get("sync_status"), "health_status": a.get("health_status"), "repo": a.get("repo"), "path": a.get("path")} for a in apps],
             "platform_security_and_admin": {
                 "registered_users_count": len(users),
                 "users_list": users,

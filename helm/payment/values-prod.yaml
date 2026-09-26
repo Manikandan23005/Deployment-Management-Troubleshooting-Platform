@@ -1,7 +1,7 @@
 global:
   environment: "prod"
 serviceName: "payment"
-replicaCount: 2
+replicaCount: 1
 containerPort: 8000
 image:
   repository: "605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/payment"

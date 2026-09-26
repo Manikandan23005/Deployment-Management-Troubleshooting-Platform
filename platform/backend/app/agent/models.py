@@ -33,6 +33,8 @@ class FailureCategory(str, Enum):
     HIGH_RESTART_COUNT = "HighRestartCount"
     HIGH_CPU = "HighCPU"
     HIGH_MEMORY = "HighMemory"
+    HIGH_ERROR_RATE = "HighErrorRate"
+    APPLICATION_EXCEPTION = "ApplicationException"
     ARGOCD_OUT_OF_SYNC = "ArgoCDOutOfSync"
     ARGOCD_SYNC_FAILURE = "ArgoCDSyncFailure"
     GITOPS_CONFIG_MISMATCH = "GitOpsConfigMismatch"

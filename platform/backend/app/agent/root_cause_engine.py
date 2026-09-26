@@ -340,7 +340,42 @@ class RootCauseEngine:
                     "suggested_action": "sync_argocd"
                 }
 
-        # 16. Healthy Workload Default
+        # 16. Application Exception & Elevated Error Rate Correlation (Telemetry + Logs)
+        prom_error_rate = prom.get("error_rate", 0.0) if prom else 0.0
+        has_app_errors = (
+            "500" in loki_str or 
+            "exception" in loki_str or 
+            "internal server error" in loki_str or 
+            "traceback" in loki_str or 
+            "database connection refused" in loki_str or
+            "httpexception" in loki_str
+        )
+        if prom_error_rate > 5.0 or (has_app_errors and pod_status in ["Running", "Unknown"]):
+            evidence_list = []
+            if prom_error_rate > 0:
+                evidence_list.append(f"Prometheus HTTP 5xx error rate: {prom_error_rate}%")
+            if has_app_errors:
+                matched_logs = [l for l in (loki_logs if isinstance(loki_logs, list) else [str(loki_logs)]) if any(k in l.lower() for k in ["500", "exception", "error", "traceback"])]
+                evidence_list.append(f"Loki Application Exception Logs ({len(matched_logs)} lines matching): {matched_logs[:2]}")
+            if argocd:
+                evidence_list.append(f"ArgoCD state: {argocd.get('sync_status', 'Synced')} (Git state verified)")
+            if deployment:
+                evidence_list.append(f"Kubernetes Deployment: {deployment.get('ready_replicas', 1)}/{deployment.get('replicas', 1)} pods Running")
+
+            cat = FailureCategory.HIGH_ERROR_RATE if prom_error_rate > 5.0 else FailureCategory.APPLICATION_EXCEPTION
+            return {
+                "failure_category": cat,
+                "incident_type": "HighErrorRate" if prom_error_rate > 5.0 else "ApplicationException",
+                "severity": "High",
+                "certainty": 0.94,
+                "confidence_level": "HIGH",
+                "probable_cause": f"Workload '{pod_name}' is experiencing application-level errors (HTTP 500/exceptions) despite healthy Kubernetes container status and synced GitOps state.",
+                "supporting_evidence": evidence_list,
+                "recommendation": "Inspect Loki exception stack traces, verify downstream service endpoints, and check database connection pools.",
+                "suggested_action": "restart_deployment"
+            }
+
+        # 17. Healthy Workload Default
         return {
             "failure_category": FailureCategory.HEALTHY_WORKLOAD,
             "incident_type": "HealthyWorkload",

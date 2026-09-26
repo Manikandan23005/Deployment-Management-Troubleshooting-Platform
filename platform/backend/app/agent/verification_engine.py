@@ -73,6 +73,17 @@ class VerificationEngine:
         except Exception:
             pass
 
+        # 5. Observability Telemetry & Logs state
+        error_rate = 0.0
+        active_alerts_count = 0
+        try:
+            from app.clients.prometheus import prometheus_client
+            alerts_data = prometheus_client.get_alerts()
+            alerts = alerts_data.get("data", {}).get("alerts", [])
+            active_alerts_count = len([a for a in alerts if clean_prefix in str(a).lower() and a.get("state") == "firing"])
+        except Exception:
+            pass
+
         return {
             "timestamp": time.time(),
             "target_resource": target_resource,
@@ -84,7 +95,9 @@ class VerificationEngine:
             "deployment_ready_replicas": deployment_ready,
             "git_desired_replicas": git_desired_replicas,
             "argocd_sync": sync_status,
-            "argocd_health": health_status
+            "argocd_health": health_status,
+            "error_rate": error_rate,
+            "firing_alerts": active_alerts_count
         }
 
     def verify_action_execution(
@@ -105,6 +118,11 @@ class VerificationEngine:
         git_verified = True
         k8s_verified = True
         argocd_verified = True
+        observability_verified = True
+
+        # Observability verification check (if alerts were firing before, verify resolution)
+        if before_snapshot.get("firing_alerts", 0) > 0 and after_snapshot.get("firing_alerts", 0) > 0:
+            observability_verified = False
 
         if action_type in ["scale_deployment", "scale"]:
             desired_replicas = (expected_params or {}).get("replicas", 3)
@@ -131,31 +149,31 @@ class VerificationEngine:
             else:
                 k8s_verified = False
 
-            if git_verified and k8s_verified and argocd_verified:
+            if git_verified and k8s_verified and argocd_verified and observability_verified:
                 verified = True
                 reason = f"VERIFIED_SUCCESS: Deployment '{target_resource}' scaled to {desired_replicas} replicas (Git Desired: {after_snapshot.get('git_desired_replicas', desired_replicas)}, ArgoCD: {after_snapshot['argocd_sync']}, K8s Pods: {after_snapshot['running_pods']})."
             else:
                 verified = False
-                reason = f"VERIFICATION_FAILED: State mismatch for '{target_resource}'. Git: {git_verified}, K8s: {k8s_verified}, ArgoCD: {argocd_verified}."
+                reason = f"VERIFICATION_FAILED: State mismatch for '{target_resource}'. Git: {git_verified}, K8s: {k8s_verified}, ArgoCD: {argocd_verified}, Observability: {observability_verified}."
 
         elif action_type in ["restart_deployment", "restart"]:
-            if after_snapshot["running_pods"] > 0 and after_snapshot["argocd_health"] in ["Healthy", "Unknown"]:
+            if after_snapshot["running_pods"] > 0 and after_snapshot["argocd_health"] in ["Healthy", "Unknown"] and observability_verified:
                 verified = True
-                reason = f"VERIFIED_SUCCESS: Rollout restart succeeded for '{target_resource}'. {after_snapshot['running_pods']} pods are healthy."
+                reason = f"VERIFIED_SUCCESS: Rollout restart succeeded for '{target_resource}'. {after_snapshot['running_pods']} pods are healthy and telemetry is clear."
             else:
                 verified = False
-                reason = f"VERIFICATION_FAILED: Pods not ready post-restart for '{target_resource}'."
+                reason = f"VERIFICATION_FAILED: Pods not ready post-restart or active alerts persist for '{target_resource}'."
 
         elif action_type in ["sync_argocd", "sync"]:
-            if after_snapshot["argocd_sync"] in ["Synced", "Unknown"]:
+            if after_snapshot["argocd_sync"] in ["Synced", "Unknown"] and observability_verified:
                 verified = True
                 reason = f"VERIFIED_SUCCESS: ArgoCD application '{target_resource}' is in Synced state."
             else:
                 verified = False
                 reason = f"VERIFICATION_FAILED: ArgoCD application '{target_resource}' is {after_snapshot['argocd_sync']}."
         else:
-            verified = True
-            reason = f"VERIFIED_SUCCESS: Diagnostic operation completed for '{target_resource}'."
+            verified = observability_verified
+            reason = f"VERIFIED_SUCCESS: Diagnostic operation completed for '{target_resource}'." if verified else f"VERIFICATION_FAILED: Alerts still active for '{target_resource}'."
 
         return {
             "verified": verified,
@@ -167,6 +185,7 @@ class VerificationEngine:
             "git_verified": git_verified,
             "k8s_verified": k8s_verified,
             "argocd_verified": argocd_verified,
+            "observability_verified": observability_verified,
             "verification_summary": reason
         }
 

@@ -134,7 +134,8 @@ docker-compose up -d
 * 🔐 **12 — RBAC & Security Specifications**: [docs/12-rbac-security.md](docs/12-rbac-security.md) ([local link](file:///home/satoru/Projects/Microservice-Deployment-Monitoring-Platform/docs/12-rbac-security.md))
 * ☸️ **13 — GitOps Cluster Registry Guide**: [docs/13-gitops-cluster-registry.md](docs/13-gitops-cluster-registry.md) ([local link](file:///home/satoru/Projects/Microservice-Deployment-Monitoring-Platform/docs/13-gitops-cluster-registry.md))
 * 💻 **14 — Developer Guide**: [docs/14-developer-guide.md](docs/14-developer-guide.md) ([local link](file:///home/satoru/Projects/Microservice-Deployment-Monitoring-Platform/docs/14-developer-guide.md))
-* 🛡️ **15 — Administrator Guide**: [docs/15-administrator-guide.md](docs/15-administrator-guide.md) ([local link](file:///home/satoru/Projects/Microservice-Deployment-Monitoring-Platform/docs/15-administrator-guide.md))
+* 🛡️ **15 — Administrator Guide**: [docs/15-administrator-guide.md](docs/15-administrator-guide.md)
+* ☁️ **16 — Unified EKS & On-Premises Architecture & Observability Guide**: [docs/16-unified-eks-observability-operations.md](docs/16-unified-eks-observability-operations.md)
 
 ---
 

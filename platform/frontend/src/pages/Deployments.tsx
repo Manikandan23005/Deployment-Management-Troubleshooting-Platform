@@ -100,7 +100,7 @@ const Deployments: React.FC = () => {
       if (modalAction === 'restart') {
         await api.restartDeployment(modalTarget.namespace, modalTarget.name);
       } else if (modalAction === 'scale') {
-        const replicas = typeof paramValue === 'number' ? paramValue : 2;
+        const replicas = typeof paramValue === 'number' ? paramValue : (parseInt(paramValue, 10) || 1);
         await api.scaleDeployment(modalTarget.namespace, modalTarget.name, replicas);
       } else if (modalAction === 'rollback') {
         await api.rollbackDeployment(modalTarget.namespace, modalTarget.name);
@@ -111,7 +111,8 @@ const Deployments: React.FC = () => {
       setModalAction(null);
       await fetchDeployments();
     } catch (e: any) {
-      alert(e.message || 'Deployment action failed due to RBAC policy or cluster state.');
+      console.error("Deployment action error:", e);
+      alert(e.message || 'Deployment action failed. Please check cluster RBAC or GitOps sync.');
     } finally {
       setActionLoading(false);
     }

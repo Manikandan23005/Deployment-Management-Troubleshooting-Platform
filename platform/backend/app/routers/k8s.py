@@ -224,7 +224,8 @@ async def scale_deployment(
             client_ip=request.client.host if request.client else "127.0.0.1"
         )
         return BaseResponse(success=True, data=data, request_id=request_id)
-    except KubernetesClientException as e:
+    except Exception as e:
+        logger.error(f"scale_deployment failed for {namespace}/{name}: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.delete("/pods/{namespace}/{name}", response_model=BaseResponse)

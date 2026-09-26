@@ -3,8 +3,23 @@ from typing import List, Dict, Any, Optional
 from app.clients.kubernetes import k8s_client
 from app.core.logging import logger
 
+import time
+
 class PodService:
+    def __init__(self):
+        self._cache: Dict[str, Any] = {}
+        self._cache_ts: Dict[str, float] = {}
+
+    def invalidate_cache(self):
+        self._cache.clear()
+        self._cache_ts.clear()
+
     def list_pods(self, namespace: Optional[str] = None, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        cache_key = f"{namespace or 'all'}:{cluster_id or 'default'}"
+        now = time.time()
+        if cache_key in self._cache and (now - self._cache_ts.get(cache_key, 0)) < 2.5:
+            return self._cache[cache_key]
+
         pods = k8s_client.list_pods(namespace, cluster_id=cluster_id)
 
         # Get deployments for GitOps correlation
@@ -72,6 +87,8 @@ class PodService:
                 "ownerName": owner_name or pod.spec.node_name,
                 "manager": "ArgoCD" if gitops_managed else "Kubernetes"
             })
+        self._cache[cache_key] = result
+        self._cache_ts[cache_key] = time.time()
         return result
 
     def describe_pod(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> Dict[str, Any]:

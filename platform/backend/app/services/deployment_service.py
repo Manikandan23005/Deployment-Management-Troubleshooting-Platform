@@ -3,7 +3,17 @@ from typing import List, Dict, Any, Optional
 from app.clients.kubernetes import k8s_client
 from app.core.logging import logger
 
+import time
+
 class DeploymentService:
+    def __init__(self):
+        self._cache: Dict[str, Any] = {}
+        self._cache_ts: Dict[str, float] = {}
+
+    def invalidate_cache(self):
+        self._cache.clear()
+        self._cache_ts.clear()
+
     def _resolve_k8s_name(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> str:
         """Resolves ArgoCD app alias names (e.g. auth-prod) to K8s deployment names (e.g. auth-service)."""
         try:
@@ -22,6 +32,11 @@ class DeploymentService:
         return name
 
     def list_deployments(self, namespace: Optional[str] = None, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        cache_key = f"{namespace or 'all'}:{cluster_id or 'default'}"
+        now = time.time()
+        if cache_key in self._cache and (now - self._cache_ts.get(cache_key, 0)) < 2.5:
+            return self._cache[cache_key]
+
         deployments = k8s_client.list_deployments(namespace, cluster_id=cluster_id)
         
         # Fetch active ArgoCD applications to match ownership dynamically
@@ -76,6 +91,8 @@ class DeploymentService:
                 "sync_status": matched_app.get("sync_status", "Synced") if matched_app else None,
                 "health_status": matched_app.get("health_status", "Healthy") if matched_app else None,
             })
+        self._cache[cache_key] = result
+        self._cache_ts[cache_key] = time.time()
         return result
 
     def check_gitops_managed(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> bool:
@@ -90,6 +107,7 @@ class DeploymentService:
             return False
 
     def restart_deployment(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> Dict[str, Any]:
+        self.invalidate_cache()
         target_name = self._resolve_k8s_name(namespace, name, cluster_id=cluster_id)
         k8s_client.restart_deployment(namespace, target_name, cluster_id=cluster_id)
         return {
@@ -98,6 +116,7 @@ class DeploymentService:
         }
 
     def scale_deployment(self, namespace: str, name: str, replicas: int, cluster_id: Optional[str] = None) -> Dict[str, Any]:
+        self.invalidate_cache()
         target_name = self._resolve_k8s_name(namespace, name, cluster_id=cluster_id)
         from app.agent.gitops import gitops_workflow
         return gitops_workflow.execute_scale(

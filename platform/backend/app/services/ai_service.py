@@ -76,7 +76,8 @@ class AIService:
                 "Register an AWS account in 'AWS Accounts' to discover Amazon EKS clusters." if not is_connected else "Monitor live telemetry streams in 'Metrics' and 'Logs'."
             ],
             "severity": "Info" if is_connected else "Warning",
-            "confidence": 95 if is_connected else 100
+            "confidence": 95 if is_connected else 100,
+            "evidence_quality": "HIGH" if is_connected else "MEDIUM"
         }
 
     def _generate_grounded_fallback(self, prompt: str, context: Dict[str, Any]) -> str:
@@ -153,17 +154,52 @@ class AIService:
         total_pods = infra.get("total_pods", 0)
         running = infra.get("running_pods_count", 0)
         failing = infra.get("failing_pods_count", 0)
+        pending = infra.get("pending_pods_count", 0)
         nodes = infra.get("total_nodes", 0)
+        nodes_list = infra.get("nodes", [])
+        pods_sample = infra.get("pods_sample", [])
+        deps = infra.get("deployments", [])
         metrics = context.get("metrics", {})
+        active_cluster_data = cluster_info.get("active_cluster")
+        active_cluster_name = (active_cluster_data.get("name") if isinstance(active_cluster_data, dict) else str(active_cluster_data)) if active_cluster_data else "Live Cluster"
+
+        # If user asks specifically about pods:
+        if any(w in words for w in ["pod", "pods", "workload", "workloads"]):
+            pod_lines = "\n".join([f"- `{p.get('name')}` ({p.get('namespace', 'default')}) — **{p.get('status')}** (Restarts: {p.get('restarts', 0)})" for p in pods_sample])
+            return (
+                f"### 📦 Kubernetes Workload Status (`{active_cluster_name}`)\n\n"
+                f"There are currently **{total_pods} total pods** in the cluster:\n\n"
+                f"- 🟢 **Running:** {running} pods\n"
+                f"- 🔴 **Crash / Error:** {failing} pods\n"
+                f"- 🟡 **Pending:** {pending} pods\n\n"
+                f"**Pod Inventory:**\n{pod_lines if pod_lines else 'No pods found in active scope.'}"
+            )
+
+        # If user asks specifically about nodes:
+        if any(w in words for w in ["node", "nodes"]):
+            node_lines = "\n".join([f"- `{n.get('name')}` — **{n.get('status')}** (Role: `{n.get('role', 'worker')}`)" for n in nodes_list])
+            return (
+                f"### 🖥️ Cluster Nodes Status (`{active_cluster_name}`)\n\n"
+                f"There are currently **{nodes} nodes** registered in the cluster:\n\n"
+                f"{node_lines if node_lines else 'No nodes detected.'}"
+            )
+
+        # If user asks specifically about deployments:
+        if any(w in words for w in ["deployment", "deployments"]):
+            dep_lines = "\n".join([f"- `{d.get('name')}` ({d.get('namespace', 'default')}) — Replicas: {d.get('available', 0)}/{d.get('replicas', 0)}" for d in deps])
+            return (
+                f"### 🚀 Deployments Summary (`{active_cluster_name}`)\n\n"
+                f"There are currently **{len(deps)} deployments** configured:\n\n"
+                f"{dep_lines if dep_lines else 'No deployments found in this scope.'}"
+            )
 
         return (
-            f"### 📊 Live Cluster Telemetry Analysis\n\n"
-            f"- **Active Cluster:** `{cluster_info.get('active_cluster', {}).get('name', 'Connected')}`\n"
-            f"- **Nodes:** {nodes} ready\n"
-            f"- **Workloads:** {running}/{total_pods} pods in `Running` state ({failing} failing)\n"
+            f"### 📊 Live Cluster Telemetry Analysis (`{active_cluster_name}`)\n\n"
+            f"- **Active Nodes:** {nodes} ready\n"
+            f"- **Workloads:** {running}/{total_pods} pods in `Running` state ({failing} failing, {pending} pending)\n"
             f"- **CPU Utilization:** {metrics.get('cpu_utilization', 0.0)}%\n"
             f"- **Memory Usage:** {metrics.get('memory_utilization', 0.0)}%\n\n"
-            f"**Log Analysis:** {context.get('targeted_logs')}"
+            f"**Log Diagnostics:** {context.get('targeted_logs')}"
         )
 
     def analyze_incident(

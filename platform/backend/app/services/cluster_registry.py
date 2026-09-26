@@ -223,6 +223,16 @@ class ClusterRegistryService:
         return list(self._memory_clusters.values())
 
     def get_cluster(self, cluster_id: str) -> Optional[Dict[str, Any]]:
+        if cluster_id in self._memory_clusters:
+            return self._memory_clusters[cluster_id]
+        if cluster_id == "cluster-minikube-local":
+            return {
+                "id": "cluster-minikube-local",
+                "name": "Local Development",
+                "provider": ClusterProvider.MINIKUBE.value,
+                "authentication_type": "Kubeconfig",
+                "status": "CONNECTED"
+            }
         clusters = self.list_clusters()
         for c in clusters:
             if c["id"] == cluster_id:
@@ -236,7 +246,7 @@ class ClusterRegistryService:
                 return c
         if clusters:
             return clusters[0]
-        return None
+        return self._memory_clusters.get("cluster-minikube-local")
 
     def add_cluster(self, data: Dict[str, Any]) -> Dict[str, Any]:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -366,12 +376,16 @@ class ClusterRegistryService:
                 config_dict = yaml.safe_load(kubeconfig_content)
                 api_client = config.new_client_from_config_dict(config_dict, context=context_name)
             else:
-                # Load from host default kubeconfig file with context_name
+                # Load from host default kubeconfig file with context_name or fallback
                 try:
                     config.load_kube_config(context=context_name)
+                    api_client = client.ApiClient()
                 except Exception:
-                    config.load_kube_config()
-                api_client = client.ApiClient()
+                    try:
+                        config.load_kube_config()
+                        api_client = client.ApiClient()
+                    except Exception:
+                        api_client = client.ApiClient()
 
             v1 = client.CoreV1Api(api_client)
             apps_v1 = client.AppsV1Api(api_client)

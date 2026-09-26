@@ -52,3 +52,16 @@ module "eks" {
     module.iam
   ]
 }
+
+# -----------------------------------------------------------------------------
+# 4. Amazon ECR Container Repositories
+# -----------------------------------------------------------------------------
+module "ecr" {
+  source = "./modules/ecr"
+
+  environment          = var.environment
+  image_tag_mutability = "MUTABLE"
+  scan_on_push         = true
+  tags                 = var.tags
+}
+

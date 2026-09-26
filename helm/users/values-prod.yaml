@@ -4,22 +4,22 @@ serviceName: "users"
 replicaCount: 2
 containerPort: 8000
 image:
-  repository: "users"
-  tag: "latest"
-  pullPolicy: "Never"
+  repository: "605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/users"
+  tag: "1.0.0"
+  pullPolicy: "IfNotPresent"
 service:
   type: "ClusterIP"
   port: 8000
 resources:
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: "250m"
+    memory: "256Mi"
   requests:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "50m"
+    memory: "64Mi"
 hpa:
   minReplicas: 2
-  maxReplicas: 10
+  maxReplicas: 5
   targetCPU: 75
 ingress:
   enabled: false

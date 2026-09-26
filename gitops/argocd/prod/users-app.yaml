@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: '/home/satoru/Projects/Microservice-Deployment-Monitoring-Platform'
+    repoURL: 'https://github.com/Manikandan23005/Deployment-Management-Troubleshooting-Platform.git'
     targetRevision: HEAD
     path: helm/users
     helm:

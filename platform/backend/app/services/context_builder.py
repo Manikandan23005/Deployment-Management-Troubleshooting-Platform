@@ -18,74 +18,44 @@ from app.services.cluster_registry import cluster_registry
 class ContextBuilder:
     """Collects live cluster configurations, events, metrics, logs, and GitOps sync states into a unified dictionary."""
 
-    def _get_pods(self) -> List[Dict[str, Any]]:
-        cached = ttl_cache.get("pods")
-        if cached is not None:
-            return cached
+    def _get_pods(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
-            val = pod_service.list_pods()
-            ttl_cache.set("pods", val, ttl=5.0)
-            return val
+            return pod_service.list_pods(cluster_id=cluster_id)
         except Exception as e:
             logger.warning(f"Failed to list pods: {str(e)}")
             return []
 
-    def _get_deployments(self) -> List[Dict[str, Any]]:
-        cached = ttl_cache.get("deployments")
-        if cached is not None:
-            return cached
+    def _get_deployments(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
-            val = deployment_service.list_deployments()
-            ttl_cache.set("deployments", val, ttl=5.0)
-            return val
+            return deployment_service.list_deployments(cluster_id=cluster_id)
         except Exception as e:
             logger.warning(f"Failed to list deployments: {str(e)}")
             return []
 
-    def _get_nodes(self) -> List[Dict[str, Any]]:
-        cached = ttl_cache.get("nodes")
-        if cached is not None:
-            return cached
+    def _get_nodes(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
-            val = node_service.list_nodes()
-            ttl_cache.set("nodes", val, ttl=10.0)
-            return val
+            return node_service.list_nodes(cluster_id=cluster_id)
         except Exception as e:
             logger.warning(f"Failed to list nodes: {str(e)}")
             return []
 
-    def _get_metrics(Self) -> Dict[str, Any]:
-        cached = ttl_cache.get("metrics")
-        if cached is not None:
-            return cached
+    def _get_metrics(self, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         try:
-            val = monitoring_service.get_cluster_metrics()
-            ttl_cache.set("metrics", val, ttl=5.0)
-            return val
+            return monitoring_service.get_cluster_metrics(cluster_id=cluster_id)
         except Exception as e:
             logger.warning(f"Failed to get metrics: {str(e)}")
             return {"cpu_utilization": 0.0, "memory_utilization": 0.0, "network_throughput_bytes": 0.0}
 
     def _get_argocd_apps(self) -> List[Dict[str, Any]]:
-        cached = ttl_cache.get("argocd_apps")
-        if cached is not None:
-            return cached
         try:
-            val = argocd_service.list_applications()
-            ttl_cache.set("argocd_apps", val, ttl=5.0)
-            return val
+            return argocd_service.list_applications()
         except Exception as e:
             logger.warning(f"Failed to list ArgoCD apps: {str(e)}")
             return []
 
-    def _get_namespaces(self) -> List[Dict[str, Any]]:
-        cached = ttl_cache.get("namespaces")
-        if cached is not None:
-            return cached
+    def _get_namespaces(self, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         try:
-            val = namespace_service.list_namespaces()
-            ttl_cache.set("namespaces", val, ttl=10.0)
-            return val
+            return namespace_service.list_namespaces(cluster_id=cluster_id)
         except Exception as e:
             logger.warning(f"Failed to list namespaces: {str(e)}")
             return []
@@ -189,26 +159,29 @@ class ContextBuilder:
         default_cluster = cluster_registry.get_default_cluster()
 
         has_connected_cluster = len(clusters_list) > 0
+        active_cluster_data = default_cluster or (clusters_list[0] if clusters_list else None)
+        active_cid = active_cluster_data.get("id") if isinstance(active_cluster_data, dict) else getattr(current_scope, "cluster_id", None)
+
         cluster_info = {
             "is_connected": has_connected_cluster,
             "total_clusters": len(clusters_list),
             "clusters": clusters_list,
             "total_aws_accounts": len(aws_accounts),
             "aws_accounts": [{"id": getattr(a, "id", None), "account_id": getattr(a, "account_id", None), "name": getattr(a, "name", None), "region": getattr(a, "default_region", None), "status": getattr(a.status, "value", str(getattr(a, "status", "")))} for a in aws_accounts],
-            "active_cluster": default_cluster or "None (No cluster connected)"
+            "active_cluster": active_cluster_data or "None (No cluster connected)"
         }
 
         # 2. Kubernetes Metadata Store (Pods, Nodes, Deployments, Namespaces)
-        raw_pods = self._get_pods() if has_connected_cluster else []
+        raw_pods = self._get_pods(cluster_id=active_cid) if has_connected_cluster else []
         pods = scope_engine.filter_pods(raw_pods, current_scope) if raw_pods else []
         running_pods = [p for p in pods if p.get("status") == "Running"]
         failing_pods = [p for p in pods if p.get("status") in ["CrashLoopBackOff", "Error", "Failed", "OOMKilled"]]
         pending_pods = [p for p in pods if p.get("status") == "Pending"]
 
-        raw_nodes = self._get_nodes() if has_connected_cluster else []
-        raw_deps = self._get_deployments() if has_connected_cluster else []
+        raw_nodes = self._get_nodes(cluster_id=active_cid) if has_connected_cluster else []
+        raw_deps = self._get_deployments(cluster_id=active_cid) if has_connected_cluster else []
         deps = scope_engine.filter_deployments(raw_deps, current_scope) if raw_deps else []
-        raw_ns = self._get_namespaces() if has_connected_cluster else []
+        raw_ns = self._get_namespaces(cluster_id=active_cid) if has_connected_cluster else []
 
         # 3. Target Service / Pod Logs Collection
         resolved_service = session_manager.resolve_target_service(session_id, prompt)

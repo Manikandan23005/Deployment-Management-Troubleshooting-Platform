@@ -97,6 +97,25 @@ class KubernetesClientFactory:
         cluster = None
         if target_cid:
             cluster = cluster_registry.get_cluster(target_cid)
+            if not cluster and target_cid == "cluster-minikube-local":
+                cluster = cluster_registry._memory_clusters.get("cluster-minikube-local")
+                if not cluster:
+                    cluster = {
+                        "id": "cluster-minikube-local",
+                        "name": "Local Development",
+                        "provider": ClusterProvider.MINIKUBE.value,
+                        "authentication_type": "Kubeconfig",
+                        "status": "CONNECTED"
+                    }
+        else:
+            default_cluster_data = cluster_registry.get_default_cluster()
+            if default_cluster_data:
+                cluster = default_cluster_data
+            else:
+                all_clusters = cluster_registry.list_clusters()
+                if all_clusters:
+                    cluster = all_clusters[0]
+
         if not cluster:
             from shared.exceptions import KubernetesClientException
             raise KubernetesClientException("No Kubernetes cluster configured.")

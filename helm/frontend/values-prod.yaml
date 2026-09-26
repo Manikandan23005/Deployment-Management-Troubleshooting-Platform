@@ -4,30 +4,16 @@ serviceName: "frontend"
 replicaCount: 2
 containerPort: 3000
 image:
-  repository: "frontend"
-  tag: "latest"
-  pullPolicy: "Never"
+  repository: "605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/frontend"
+  tag: "1.0.0"
+  pullPolicy: "IfNotPresent"
 service:
   type: "ClusterIP"
   port: 3000
 resources:
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: "250m"
+    memory: "256Mi"
   requests:
-    cpu: "100m"
-    memory: "128Mi"
-hpa:
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPU: 75
-ingress:
-  enabled: true
-  className: "nginx"
-  annotations:
-    kubernetes.io/ingress.class: "nginx"
-  hosts:
-    - host: "frontend.devopsnexus.prod"
-      paths:
-        - path: "/"
-          pathType: "Prefix"
+    cpu: "50m"
+    memory: "64Mi"

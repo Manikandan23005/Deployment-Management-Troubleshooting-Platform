@@ -405,7 +405,7 @@ class ArgoCDClient:
             "spec": {
                 "project": "default",
                 "source": {
-                    "repoURL": "https://github.com/Manikandan23005/Deployment-Management-Troubleshooting-Platform.git",
+                    "repoURL": "https://github.com/Manikandan23005/Microservice-Deployment-Monitoring-Platform.git",
                     "targetRevision": "main",
                     "path": repo_path
                 },

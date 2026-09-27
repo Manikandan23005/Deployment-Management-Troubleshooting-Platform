@@ -161,7 +161,11 @@ class PlatformInitializer:
                                 "automated": {
                                     "selfHeal": True,
                                     "prune": False
-                                }
+                                },
+                                "syncOptions": [
+                                    "CreateNamespace=true",
+                                    "RespectIgnoreDifferences=true"
+                                ]
                             },
                             "ignoreDifferences": [
                                 {
@@ -184,7 +188,64 @@ class PlatformInitializer:
                     except Exception as crd_err:
                         logger.warning(f"CRD auto-creation for '{app_name}' error: {str(crd_err)}")
                 else:
-                    logger.info(f"ArgoCD Application CRD '{app_name}' verified.")
+                    try:
+                        existing_obj = custom_api.get_namespaced_custom_object(
+                            group="argoproj.io",
+                            version="v1alpha1",
+                            namespace="argocd",
+                            plural="applications",
+                            name=app_name
+                        )
+                        spec = existing_obj.get("spec", {})
+                        ignore_diffs = spec.get("ignoreDifferences") or []
+                        sync_options = spec.get("syncPolicy", {}).get("syncOptions") or []
+                        
+                        has_replica_ignore = any(
+                            isinstance(d, dict) and d.get("kind") == "Deployment" and "/spec/replicas" in (d.get("jsonPointers") or [])
+                            for d in ignore_diffs
+                        )
+                        has_respect = "RespectIgnoreDifferences=true" in sync_options
+
+                        if not has_replica_ignore or not has_respect:
+                            updated_ignore_diffs = list(ignore_diffs)
+                            if not has_replica_ignore:
+                                updated_ignore_diffs.append({
+                                    "group": "apps",
+                                    "kind": "Deployment",
+                                    "jsonPointers": ["/spec/replicas"]
+                                })
+                            
+                            updated_sync_options = list(sync_options)
+                            if not has_respect:
+                                updated_sync_options.append("RespectIgnoreDifferences=true")
+                            if "CreateNamespace=true" not in updated_sync_options:
+                                updated_sync_options.append("CreateNamespace=true")
+
+                            patch_body = {
+                                "spec": {
+                                    "syncPolicy": {
+                                        "automated": {
+                                            "selfHeal": True,
+                                            "prune": False
+                                        },
+                                        "syncOptions": updated_sync_options
+                                    },
+                                    "ignoreDifferences": updated_ignore_diffs
+                                }
+                            }
+                            custom_api.patch_namespaced_custom_object(
+                                group="argoproj.io",
+                                version="v1alpha1",
+                                namespace="argocd",
+                                plural="applications",
+                                name=app_name,
+                                body=patch_body
+                            )
+                            logger.info(f"Patched ArgoCD Application CRD '{app_name}' with ignoreDifferences and RespectIgnoreDifferences.")
+                        else:
+                            logger.info(f"ArgoCD Application CRD '{app_name}' verified with ignoreDifferences.")
+                    except Exception as patch_err:
+                        logger.warning(f"CRD ignoreDifferences check/patch note for '{app_name}': {str(patch_err)}")
 
         except Exception as e:
             logger.warning(f"ArgoCD applications reconciliation warning: {str(e)}")

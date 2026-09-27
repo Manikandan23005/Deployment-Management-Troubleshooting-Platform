@@ -129,7 +129,10 @@ class GitChangeEngine:
 
         with self._lock:
             try:
-                # 1. Read existing and apply replacement
+                files_to_commit = []
+                dir_path = os.path.dirname(file_path) if file_path else ""
+
+                # 1. Read existing and apply replacement to target file
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
@@ -144,21 +147,43 @@ class GitChangeEngine:
 
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(updated_content)
+                files_to_commit.append(file_path)
 
-                # 2. Git config & add
+                # 2. Also update sibling values files if present
+                if dir_path and os.path.exists(dir_path):
+                    for sibling in ["values.yaml", "values-prod.yaml", "values-dev.yaml", "values-stage.yaml", "values-qa.yaml"]:
+                        sibling_path = os.path.join(dir_path, sibling)
+                        if sibling_path != file_path and os.path.exists(sibling_path):
+                            try:
+                                with open(sibling_path, "r", encoding="utf-8") as sf:
+                                    s_content = sf.read()
+                                s_updated = re.sub(r"(replicaCount:\s*)\d+", rf"\g<1>{preview.requested_replicas}", s_content)
+                                if "minReplicas:" in s_updated:
+                                    s_updated = re.sub(r"(minReplicas:\s*)\d+", rf"\g<1>{preview.requested_replicas}", s_updated)
+                                if "maxReplicas:" in s_updated:
+                                    s_updated = re.sub(r"(maxReplicas:\s*)\d+", rf"\g<1>{max(preview.requested_replicas, 10)}", s_updated)
+                                yaml.safe_load(s_updated)
+                                with open(sibling_path, "w", encoding="utf-8") as sf:
+                                    sf.write(s_updated)
+                                files_to_commit.append(sibling_path)
+                            except Exception as sibling_err:
+                                logger.debug(f"Sibling values file update note: {str(sibling_err)}")
+
+                # 3. Git config & add
                 subprocess.run(["git", "config", "user.name", "DevOps Nexus Admin"], cwd=self.repo_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.run(["git", "config", "user.email", "admin@devopsnexus.internal"], cwd=self.repo_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run(["git", "add", file_path], cwd=self.repo_root, check=True)
+                for fpath in files_to_commit:
+                    subprocess.run(["git", "add", fpath], cwd=self.repo_root, check=True)
 
-                # 3. Git commit
+                # 4. Git commit
                 msg = commit_message or f"scale(gitops): scale {preview.target_resource} to {preview.requested_replicas} replicas"
                 commit_proc = subprocess.run(["git", "commit", "-m", msg], cwd=self.repo_root, capture_output=True, text=True)
 
-                # 4. Get Commit SHA
+                # 5. Get Commit SHA
                 sha_proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo_root, capture_output=True, text=True)
                 commit_sha = sha_proc.stdout.strip()[:7] if sha_proc.returncode == 0 else "local-commit"
 
-                # 5. Git push (soft fail if no remote upstream configured or offline)
+                # 6. Git push (soft fail if no remote upstream configured or offline)
                 try:
                     remote_check = subprocess.run(["git", "remote"], cwd=self.repo_root, capture_output=True, text=True)
                     if remote_check.stdout.strip():
@@ -172,7 +197,7 @@ class GitChangeEngine:
                     commit_sha=commit_sha,
                     commit_message=msg,
                     branch=branch,
-                    files_changed=[file_path]
+                    files_changed=files_to_commit
                 )
 
             except Exception as e:

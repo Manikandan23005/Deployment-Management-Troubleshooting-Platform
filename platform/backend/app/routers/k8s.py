@@ -123,8 +123,9 @@ async def describe_pod(
     pod_name: str = Path(..., description="Target pod identifier.")
 ):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     try:
-        data = pod_service.describe_pod(namespace, pod_name)
+        data = pod_service.describe_pod(namespace, pod_name, cluster_id=cluster_id)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except KubernetesClientException as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -137,8 +138,9 @@ async def get_pod_logs(
     tail_lines: int = Query(100, ge=1, description="Lines offset limit.")
 ):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     try:
-        logs_text = pod_service.get_pod_logs(namespace, pod_name, tail_lines)
+        logs_text = pod_service.get_pod_logs(namespace, pod_name, tail_lines, cluster_id=cluster_id)
         return BaseResponse(success=True, data={"logs": logs_text}, request_id=request_id)
     except KubernetesClientException as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -182,6 +184,7 @@ async def restart_deployment(
     authz_engine.authorize(username, "deployments", "restart_deployment", namespace=namespace, application=name)
     try:
         data = deployment_service.restart_deployment(namespace, name, cluster_id=cluster_id)
+        pod_service.invalidate_cache()
         audit_service.log_action(
             username=username,
             role_name=user_dict.get("role", "Viewer"),
@@ -208,10 +211,11 @@ async def scale_deployment(
     username = user_dict.get("username") or user_dict.get("sub") or "viewer"
 
     authz_engine.authorize(username, "deployments", "scale_deployment", namespace=namespace, application=name)
-    is_gitops = deployment_service.check_gitops_managed(namespace, name)
+    is_gitops = deployment_service.check_gitops_managed(namespace, name, cluster_id=cluster_id)
 
     try:
         data = deployment_service.scale_deployment(namespace, name, body.replicas, cluster_id=cluster_id)
+        pod_service.invalidate_cache()
         action_name = "scale_gitops_deployment" if is_gitops else "scale_deployment"
         audit_service.log_action(
             username=username,
@@ -235,12 +239,14 @@ async def delete_pod(
     name: str = Path(..., description="Target pod identifier.")
 ):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     user_dict = get_current_user(request)
     username = user_dict.get("username") or user_dict.get("sub") or "viewer"
 
     authz_engine.authorize(username, "pods", "delete", namespace=namespace, application=name)
     try:
-        data = pod_service.delete_pod(namespace, name)
+        data = pod_service.delete_pod(namespace, name, cluster_id=cluster_id)
+        deployment_service.invalidate_cache()
         audit_service.log_action(
             username=username,
             role_name=user_dict.get("role", "Viewer"),
@@ -260,12 +266,14 @@ async def restart_pod(
     name: str = Path(..., description="Target pod identifier.")
 ):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     user_dict = get_current_user(request)
     username = user_dict.get("username") or user_dict.get("sub") or "viewer"
 
     authz_engine.authorize(username, "pods", "restart_deployment", namespace=namespace, application=name)
     try:
-        data = pod_service.restart_pod(namespace, name)
+        data = pod_service.restart_pod(namespace, name, cluster_id=cluster_id)
+        deployment_service.invalidate_cache()
         audit_service.log_action(
             username=username,
             role_name=user_dict.get("role", "Viewer"),
@@ -286,12 +294,13 @@ async def delete_deployment(
     temporary: bool = Query(False, description="Set to true for temporary runtime maintenance deletion under ArgoCD self-healing.")
 ):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     user_dict = get_current_user(request)
     username = user_dict.get("username") or user_dict.get("sub") or "viewer"
 
     authz_engine.authorize(username, "deployments", "delete", namespace=namespace, application=name)
     
-    is_gitops = deployment_service.check_gitops_managed(namespace, name)
+    is_gitops = deployment_service.check_gitops_managed(namespace, name, cluster_id=cluster_id)
     if is_gitops and not temporary:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -299,8 +308,10 @@ async def delete_deployment(
         )
 
     try:
-        target_name = deployment_service._resolve_k8s_name(namespace, name)
-        k8s_client.delete_deployment(namespace, target_name)
+        target_name = deployment_service._resolve_k8s_name(namespace, name, cluster_id=cluster_id)
+        k8s_client.delete_deployment(namespace, target_name, cluster_id=cluster_id)
+        deployment_service.invalidate_cache()
+        pod_service.invalidate_cache()
         action_name = "temporary_delete" if is_gitops else "delete_deployment"
         audit_service.log_action(
             username=username,
@@ -324,13 +335,16 @@ async def rollback_deployment(
     name: str = Path(..., description="Target deployment identifier.")
 ):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     user_dict = get_current_user(request)
     username = user_dict.get("username") or user_dict.get("sub") or "viewer"
 
     authz_engine.authorize(username, "deployments", "rollback_application", namespace=namespace, application=name)
     try:
-        target_name = deployment_service._resolve_k8s_name(namespace, name)
-        k8s_client.restart_deployment(namespace, target_name)
+        target_name = deployment_service._resolve_k8s_name(namespace, name, cluster_id=cluster_id)
+        k8s_client.restart_deployment(namespace, target_name, cluster_id=cluster_id)
+        deployment_service.invalidate_cache()
+        pod_service.invalidate_cache()
         audit_service.log_action(
             username=username,
             role_name=user_dict.get("role", "Viewer"),

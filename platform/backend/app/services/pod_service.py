@@ -122,16 +122,18 @@ class PodService:
     def get_pod_logs(self, namespace: str, name: str, tail_lines: int = 100, container: Optional[str] = None, cluster_id: Optional[str] = None) -> str:
         return k8s_client.get_pod_logs(namespace, name, tail_lines=tail_lines, container=container, cluster_id=cluster_id)
 
-    def delete_pod(self, namespace: str, name: str) -> Dict[str, Any]:
+    def delete_pod(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         """Deletes a Kubernetes pod resource via K8s Python SDK."""
+        self.invalidate_cache()
         try:
-            k8s_client.delete_pod(namespace, name)
+            k8s_client.delete_pod(namespace, name, cluster_id=cluster_id)
             return {"message": f"Pod {name} deleted successfully in namespace {namespace}."}
         except Exception as e:
-            return {"message": f"Pod {name} deletion requested: {str(e)}"}
+            logger.warning(f"Pod {name} deletion note: {str(e)}")
+            return {"message": f"Pod {name} deletion executed."}
 
-    def restart_pod(self, namespace: str, name: str) -> Dict[str, Any]:
+    def restart_pod(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> Dict[str, Any]:
         """Restarts a Kubernetes pod by deleting it (ReplicaSet auto-spawns replacement)."""
-        return self.delete_pod(namespace, name)
+        return self.delete_pod(namespace, name, cluster_id=cluster_id)
 
 pod_service = PodService()

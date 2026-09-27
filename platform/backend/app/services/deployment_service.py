@@ -34,7 +34,7 @@ class DeploymentService:
     def list_deployments(self, namespace: Optional[str] = None, cluster_id: Optional[str] = None) -> List[Dict[str, Any]]:
         cache_key = f"{namespace or 'all'}:{cluster_id or 'default'}"
         now = time.time()
-        if cache_key in self._cache and (now - self._cache_ts.get(cache_key, 0)) < 2.5:
+        if cache_key in self._cache and (now - self._cache_ts.get(cache_key, 0)) < 4.0:
             return self._cache[cache_key]
 
         deployments = k8s_client.list_deployments(namespace, cluster_id=cluster_id)

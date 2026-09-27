@@ -12,9 +12,11 @@ class PlatformSettings(BaseSettings):
     PROMETHEUS_URL: str = "http://prometheus-service.devops-nexus.svc.cluster.local:9090"
     LOKI_URL: str = "http://loki-service.devops-nexus.svc.cluster.local:3100"
     
-    # GitOps / ArgoCD
+    # GitOps / ArgoCD / GitHub
     ARGOCD_SERVER: str = "argocd-server.argocd.svc.cluster.local"
     ARGOCD_TOKEN: str = ""
+    GITHUB_TOKEN: str = ""
+    GITHUB_REPO: str = "Manikandan23005/Deployment-Management-Troubleshooting-Platform"
     
     # AI Engine Settings
     AI_PROVIDER: str = "ollama"

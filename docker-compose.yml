@@ -65,6 +65,7 @@ services:
       - LLM_MODEL=${LLM_MODEL:-}
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - LMSTUDIO_HOST=${LMSTUDIO_HOST:-http://host.docker.internal:1234/v1}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - REPO_ROOT=/repo
     volumes:
       - .:/repo

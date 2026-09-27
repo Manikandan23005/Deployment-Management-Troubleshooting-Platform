@@ -230,13 +230,26 @@ class GitChangeEngine:
 
                 # 6. Git push to remote
                 try:
+                    from app.core.settings import settings
                     target_branch = branch if (branch and branch != "HEAD") else "main"
                     push_env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_SSH_COMMAND="ssh -o BatchMode=yes")
-                    push_proc = subprocess.run(["git", "push", "origin", target_branch], cwd=root, capture_output=True, text=True, timeout=10, env=push_env)
-                    if push_proc.returncode != 0:
-                        subprocess.run(["git", "push"], cwd=root, capture_output=True, timeout=10, env=push_env)
+                    token = os.environ.get("GITHUB_TOKEN") or getattr(settings, "GITHUB_TOKEN", None)
+                    repo_slug = getattr(settings, "GITHUB_REPO", "Manikandan23005/Deployment-Management-Troubleshooting-Platform")
+
+                    pushed = False
+                    if token:
+                        auth_url = f"https://x-access-token:{token}@github.com/{repo_slug}.git"
+                        push_proc = subprocess.run(["git", "push", auth_url, f"HEAD:{target_branch}"], cwd=root, capture_output=True, text=True, timeout=15, env=push_env)
+                        if push_proc.returncode == 0:
+                            pushed = True
+                            logger.info(f"Successfully pushed GitOps commit to GitHub branch '{target_branch}'.")
+
+                    if not pushed:
+                        push_proc = subprocess.run(["git", "push", "origin", target_branch], cwd=root, capture_output=True, text=True, timeout=10, env=push_env)
+                        if push_proc.returncode != 0:
+                            subprocess.run(["git", "push"], cwd=root, capture_output=True, timeout=10, env=push_env)
                 except Exception as e:
-                    logger.debug(f"Git push skipped or non-fatal: {str(e)}")
+                    logger.debug(f"Git push note: {str(e)}")
 
                 return GitCommitResult(
                     success=True,

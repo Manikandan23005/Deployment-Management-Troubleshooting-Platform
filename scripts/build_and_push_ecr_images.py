@@ -12,7 +12,7 @@ from typing import List, Dict, Any
 AWS_ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID", "605294565283")
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
 ECR_REGISTRY = f"{AWS_ACCOUNT_ID}.dkr.ecr.{AWS_REGION}.amazonaws.com"
-RELEASE_TAG = os.getenv("RELEASE_TAG", "1.0.0")
+RELEASE_TAG = os.getenv("RELEASE_TAG", "1.1.0")
 
 APPLICATIONS = [
     {"name": "auth", "context": "applications/auth", "dockerfile": "applications/auth/Dockerfile"},

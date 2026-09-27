@@ -5,7 +5,7 @@ replicaCount: 1
 containerPort: 8000
 image:
   repository: "605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/auth"
-  tag: "1.1.0"
+  tag: "1.2.0"
   pullPolicy: "Always"
 service:
   type: "ClusterIP"

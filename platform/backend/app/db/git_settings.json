@@ -1,6 +1,6 @@
 {
   "provider": "github",
-  "repository": "Manikandan23005/Microservice-Deployment-Monitoring-Platform",
+  "repository": "Manikandan23005/Deployment-Management-Troubleshooting-Platform",
   "branch": "main",
-  "token": "ghp_mocktoken1234567890abcdefghijklmnopqr"
+  "token": ""
 }

@@ -96,11 +96,14 @@ class KubernetesClient:
 
     def scale_deployment(self, namespace: str, name: str, replicas: int, cluster_id: Optional[str] = None) -> Any:
         clients = self.get_clients(cluster_id)
+        body = {"spec": {"replicas": replicas}}
         try:
-            body = {"spec": {"replicas": replicas}}
-            return clients["apps_v1"].patch_namespaced_deployment_scale(name, namespace, body)
-        except Exception as e:
-            raise KubernetesClientException(f"Failed to scale deployment {name} to {replicas}: {str(e)}")
+            return clients["apps_v1"].patch_namespaced_deployment(name, namespace, body)
+        except Exception:
+            try:
+                return clients["apps_v1"].patch_namespaced_deployment_scale(name, namespace, body)
+            except Exception as e:
+                raise KubernetesClientException(f"Failed to scale deployment {name} to {replicas}: {str(e)}")
 
     def restart_deployment(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> Any:
         clients = self.get_clients(cluster_id)

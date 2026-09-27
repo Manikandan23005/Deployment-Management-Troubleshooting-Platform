@@ -37,6 +37,9 @@ COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml ./
 COPY platform/backend/app ./app
 COPY platform/shared ./platform/shared
+COPY helm ./helm
+COPY gitops ./gitops
+COPY kubernetes ./kubernetes
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

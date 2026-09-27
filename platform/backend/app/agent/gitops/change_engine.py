@@ -12,11 +12,28 @@ from app.agent.gitops.models import GitOpsOwnership, GitChangePreview, GitCommit
 class GitChangeEngine:
     """Safely computes structured YAML diffs, validates syntax, and performs deterministic Git mutations."""
 
+    @staticmethod
+    def get_repo_root() -> str:
+        candidates = [
+            "/repo",
+            "/app/repo",
+            os.environ.get("REPO_ROOT", ""),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
+            os.getcwd(),
+            "/app"
+        ]
+        for c in candidates:
+            if c and os.path.exists(c) and (os.path.exists(os.path.join(c, "helm")) or os.path.exists(os.path.join(c, ".git"))):
+                return c
+        return "/repo" if os.path.exists("/repo") else os.getcwd()
+
     def __init__(self):
         self._lock = threading.Lock()
-        self.repo_root = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
-        )
+
+    @property
+    def repo_root(self) -> str:
+        return self.get_repo_root()
 
     def read_desired_state(self, values_file_path: str) -> Dict[str, Any]:
         """Reads and parses YAML desired state from Helm values file."""
@@ -44,7 +61,18 @@ class GitChangeEngine:
         if new_replicas < 0 or new_replicas > 100:
             raise ValueError(f"Invalid replica count {new_replicas}. Must be between 0 and 100.")
 
+        root = self.get_repo_root()
         file_path = ownership.target_values_file
+        if not file_path or not os.path.exists(file_path):
+            # Check if file exists under root/helm/...
+            candidate = os.path.join(root, ownership.helm_chart_path or f"helm/{ownership.target_name.replace('-service', '')}", "values-prod.yaml")
+            if os.path.exists(candidate):
+                file_path = candidate
+            else:
+                candidate_default = os.path.join(root, ownership.helm_chart_path or f"helm/{ownership.target_name.replace('-service', '')}", "values.yaml")
+                if os.path.exists(candidate_default):
+                    file_path = candidate_default
+
         if not file_path or not os.path.exists(file_path):
             # If no local file, simulate preview for remote Git repo
             file_path = f"{ownership.helm_chart_path}/values-prod.yaml"
@@ -58,6 +86,12 @@ class GitChangeEngine:
 
             # Precise regex-based field replacement preserving structure & comments
             new_content = re.sub(r"(replicaCount:\s*)\d+", rf"\g<1>{new_replicas}", old_content)
+            if "minReplicas:" in new_content:
+                new_content = re.sub(r"(minReplicas:\s*)\d+", rf"\g<1>{new_replicas}", new_content)
+            if "maxReplicas:" in new_content:
+                current_max = state.get("hpa", {}).get("maxReplicas", 10)
+                new_max = max(new_replicas, current_max)
+                new_content = re.sub(r"(maxReplicas:\s*)\d+", rf"\g<1>{new_max}", new_content)
             if "minReplicas:" in new_content:
                 new_content = re.sub(r"(minReplicas:\s*)\d+", rf"\g<1>{new_replicas}", new_content)
             if "maxReplicas:" in new_content:
@@ -115,8 +149,19 @@ class GitChangeEngine:
                 error="Cannot commit invalid YAML desired state."
             )
 
+        root = self.get_repo_root()
         file_path = preview.file_path
-        if not os.path.exists(file_path):
+        if not file_path or not os.path.exists(file_path):
+            if file_path:
+                candidate = os.path.join(root, file_path)
+                if os.path.exists(candidate):
+                    file_path = candidate
+            if not file_path or not os.path.exists(file_path):
+                candidate2 = os.path.join(root, f"helm/{preview.target_resource.replace('-service', '')}/values-prod.yaml")
+                if os.path.exists(candidate2):
+                    file_path = candidate2
+
+        if not file_path or not os.path.exists(file_path):
             # In mock or test environment where physical file doesn't exist on disk
             mock_sha = "git-" + os.urandom(4).hex()
             return GitCommitResult(
@@ -124,7 +169,7 @@ class GitChangeEngine:
                 commit_sha=mock_sha,
                 commit_message=commit_message or f"scale(gitops): scale {preview.target_resource} to {preview.requested_replicas} replicas",
                 branch=branch,
-                files_changed=[file_path]
+                files_changed=[file_path] if file_path else []
             )
 
         with self._lock:
@@ -170,25 +215,26 @@ class GitChangeEngine:
                                 logger.debug(f"Sibling values file update note: {str(sibling_err)}")
 
                 # 3. Git config & add
-                subprocess.run(["git", "config", "user.name", "DevOps Nexus Admin"], cwd=self.repo_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run(["git", "config", "user.email", "admin@devopsnexus.internal"], cwd=self.repo_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["git", "config", "user.name", "DevOps Nexus Admin"], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["git", "config", "user.email", "admin@devopsnexus.internal"], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 for fpath in files_to_commit:
-                    subprocess.run(["git", "add", fpath], cwd=self.repo_root, check=True)
+                    subprocess.run(["git", "add", fpath], cwd=root, check=True)
 
                 # 4. Git commit
                 msg = commit_message or f"scale(gitops): scale {preview.target_resource} to {preview.requested_replicas} replicas"
-                commit_proc = subprocess.run(["git", "commit", "-m", msg], cwd=self.repo_root, capture_output=True, text=True)
+                commit_proc = subprocess.run(["git", "commit", "-m", msg], cwd=root, capture_output=True, text=True)
 
                 # 5. Get Commit SHA
-                sha_proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo_root, capture_output=True, text=True)
+                sha_proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True)
                 commit_sha = sha_proc.stdout.strip()[:7] if sha_proc.returncode == 0 else "local-commit"
 
-                # 6. Git push (soft fail if no remote upstream configured or offline)
+                # 6. Git push to remote
                 try:
-                    remote_check = subprocess.run(["git", "remote"], cwd=self.repo_root, capture_output=True, text=True)
-                    if remote_check.stdout.strip():
-                        push_env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_SSH_COMMAND="ssh -o BatchMode=yes")
-                        subprocess.run(["git", "push"], cwd=self.repo_root, capture_output=True, timeout=2, env=push_env)
+                    target_branch = branch if (branch and branch != "HEAD") else "main"
+                    push_env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_SSH_COMMAND="ssh -o BatchMode=yes")
+                    push_proc = subprocess.run(["git", "push", "origin", target_branch], cwd=root, capture_output=True, text=True, timeout=10, env=push_env)
+                    if push_proc.returncode != 0:
+                        subprocess.run(["git", "push"], cwd=root, capture_output=True, timeout=10, env=push_env)
                 except Exception as e:
                     logger.debug(f"Git push skipped or non-fatal: {str(e)}")
 

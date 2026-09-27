@@ -7,11 +7,28 @@ from app.agent.gitops.models import GitOpsOwnership
 class GitOpsOwnershipResolver:
     """Resolves whether a Kubernetes workload is GitOps-managed and maps its repository, Helm chart, and values files."""
 
+    @staticmethod
+    def get_repo_root() -> str:
+        candidates = [
+            "/repo",
+            "/app/repo",
+            os.environ.get("REPO_ROOT", ""),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
+            os.getcwd(),
+            "/app"
+        ]
+        for c in candidates:
+            if c and os.path.exists(c) and (os.path.exists(os.path.join(c, "helm")) or os.path.exists(os.path.join(c, ".git"))):
+                return c
+        return "/repo" if os.path.exists("/repo") else os.getcwd()
+
     def __init__(self):
-        # Base repo directory resolution
-        self.repo_root = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
-        )
+        pass
+
+    @property
+    def repo_root(self) -> str:
+        return self.get_repo_root()
 
     def _resolve_clean_prefix(self, name: str) -> str:
         """Extracts clean service name prefix (e.g. 'auth-prod', 'auth-service' -> 'auth')."""
@@ -20,7 +37,8 @@ class GitOpsOwnershipResolver:
     def resolve_ownership(self, namespace: str, name: str, cluster_id: Optional[str] = None) -> GitOpsOwnership:
         """Determines if target deployment is managed by ArgoCD and locates its Helm values file."""
         clean_prefix = self._resolve_clean_prefix(name)
-        helm_service_dir = os.path.join(self.repo_root, "helm", clean_prefix)
+        root = self.get_repo_root()
+        helm_service_dir = os.path.join(root, "helm", clean_prefix)
         has_local_helm = os.path.exists(helm_service_dir) and os.path.isdir(helm_service_dir)
 
         # 1. Fetch active ArgoCD applications if available
@@ -51,7 +69,7 @@ class GitOpsOwnershipResolver:
             )
 
         app_identifier = matched_app.get("name") if matched_app else f"{clean_prefix}-prod"
-        repo_url = (matched_app.get("repo_url") if matched_app else None) or "https://github.com/Manikandan23005/Microservice-Deployment-Monitoring-Platform"
+        repo_url = (matched_app.get("repo_url") if matched_app else None) or "https://github.com/Manikandan23005/Deployment-Management-Troubleshooting-Platform"
         branch = (matched_app.get("targetRevision") if matched_app else "main") or "main"
 
         # Determine target Helm values file

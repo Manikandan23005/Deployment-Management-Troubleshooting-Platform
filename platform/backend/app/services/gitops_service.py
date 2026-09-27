@@ -5,7 +5,7 @@ from shared.exceptions import DevOpsNexusException
 from app.core.logging import logger
 
 class GitOpsService:
-    def get_workflows_status(self, owner: str = "Manikandan23005", repo: str = "Microservice-Deployment-Monitoring-Platform") -> List[Dict[str, Any]]:
+    def get_workflows_status(self, owner: str = "Manikandan23005", repo: str = "Deployment-Management-Troubleshooting-Platform") -> List[Dict[str, Any]]:
         """Retrieves CI/CD workflow status logs from GitHub."""
         try:
             runs = github_client.get_workflow_runs(owner, repo)
@@ -24,7 +24,7 @@ class GitOpsService:
         except DevOpsNexusException:
             return []
 
-    def get_repository_details(self, owner: str = "Manikandan23005", repo: str = "Microservice-Deployment-Monitoring-Platform") -> Dict[str, Any]:
+    def get_repository_details(self, owner: str = "Manikandan23005", repo: str = "Deployment-Management-Troubleshooting-Platform") -> Dict[str, Any]:
         """Gathers latest commits list and branches catalog."""
         try:
             commits = github_client.get_commits(owner, repo)

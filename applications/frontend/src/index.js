@@ -21,13 +21,14 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (req, res) => res.json({ status: 'healthy', service: 'frontend' }));
+app.get('/healthz', (req, res) => res.json({ status: 'healthy', service: 'frontend' }));
 app.get('/ready', (req, res) => res.json({ status: 'ready', service: 'frontend' }));
-app.get('/version', (req, res) => res.json({ version: '0.1.0', service: 'frontend' }));
+app.get('/version', (req, res) => res.json({ version: '1.0.0', service: 'frontend' }));
 app.get('/metrics', async (req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());
 });
 
 app.listen(PORT, () => {
-  console.log(`Frontend service running on port ${PORT}`);
+  console.log(`Nexus E-Commerce Frontend running on port ${PORT}`);
 });

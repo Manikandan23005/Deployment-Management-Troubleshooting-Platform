@@ -194,6 +194,12 @@ class KubernetesClientFactory:
 
         except Exception as e:
             logger.error(f"Failed to generate dynamic EKS Kubernetes client for cluster '{cid}': {str(e)}")
-            return cluster_registry.get_k8s_clients(cid)
+            fallback_clients = cluster_registry.get_k8s_clients(cid)
+            with self._lock:
+                self._eks_client_cache[cid] = {
+                    "clients": fallback_clients,
+                    "expires_at": now + datetime.timedelta(minutes=10)
+                }
+            return fallback_clients
 
 k8s_client_factory = KubernetesClientFactory()

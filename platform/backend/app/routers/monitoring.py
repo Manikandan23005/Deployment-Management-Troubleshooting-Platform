@@ -1,11 +1,11 @@
-# --- Observability REST Router ---
-from fastapi import APIRouter, Request, Query, HTTPException, status
+# --- Observability REST Router with Cluster Routing ---
+from fastapi import APIRouter, Request, Query, HTTPException, status, Depends
 from typing import Optional
 from app.schemas.responses import BaseResponse
 from app.services.monitoring_service import monitoring_service
 from app.services.log_service import log_service
+from app.services.scope_engine import scope_engine
 from shared.exceptions import TelemetryFetchException
-from fastapi import Depends
 from app.dependencies.auth import get_current_user
 from app.utils.observability import observability_metrics
 
@@ -14,7 +14,8 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)]
 )
 
-from app.services.scope_engine import scope_engine
+def _get_cluster_id(request: Request) -> Optional[str]:
+    return request.headers.get("X-Cluster-ID") or request.query_params.get("cluster_id")
 
 @router.get("/metrics", response_model=BaseResponse)
 async def get_cluster_metrics(
@@ -26,9 +27,10 @@ async def get_cluster_metrics(
 ):
     """Retrieves cluster performance summary metrics."""
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     try:
         scope = scope_engine.resolve_scope(scope_mode, namespace, app, domain)
-        data = monitoring_service.get_cluster_metrics(scope)
+        data = monitoring_service.get_cluster_metrics(scope, cluster_id=cluster_id)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except Exception as e:
         return BaseResponse(
@@ -54,9 +56,10 @@ async def get_metrics_range(
 ):
     """Retrieves metrics range data points for graphic rendering."""
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     try:
         scope = scope_engine.resolve_scope(scope_mode, namespace, app, domain)
-        data = monitoring_service.get_performance_range(metric_type, scope, time_range)
+        data = monitoring_service.get_performance_range(metric_type, scope, time_range, cluster_id=cluster_id)
         return BaseResponse(success=True, data={"values": data or []}, request_id=request_id)
     except Exception as e:
         return BaseResponse(success=True, data={"values": []}, request_id=request_id)
@@ -75,9 +78,10 @@ async def get_logs(
 ):
     """Retrieves container logs fetched from Loki logs indexes or Kubernetes API fallback."""
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     try:
         scope = scope_engine.resolve_scope(scope_mode, namespace, app, domain)
-        data = log_service.get_logs(pod, search=search, limit=limit, scope=scope, container=container)
+        data = log_service.get_logs(pod, search=search, limit=limit, scope=scope, container=container, cluster_id=cluster_id)
         return BaseResponse(success=True, data=data or [], request_id=request_id)
     except Exception as e:
         return BaseResponse(success=True, data=[], request_id=request_id)
@@ -102,9 +106,10 @@ async def get_alerts(
 ):
     """Retrieves active Prometheus AlertManager & Kubernetes workload firing alerts."""
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     try:
         scope = scope_engine.resolve_scope(scope_mode, namespace, app, domain)
-        alerts = monitoring_service.get_active_alerts(scope)
+        alerts = monitoring_service.get_active_alerts(scope, cluster_id=cluster_id)
         return BaseResponse(success=True, data=alerts or [], request_id=request_id)
     except Exception as e:
         return BaseResponse(success=True, data=[], request_id=request_id)

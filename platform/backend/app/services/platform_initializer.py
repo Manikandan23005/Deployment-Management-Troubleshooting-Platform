@@ -83,28 +83,29 @@ class PlatformInitializer:
         logger.info("🚀 DevOps Nexus platform self-healing bootstrap complete 100%.")
 
     def _ensure_prometheus_nodeport(self):
-        """Ensures kube-prometheus-stack-prometheus service is exposed on NodePort 30090."""
+        """Ensures Prometheus and Loki services are verified and configured in monitoring namespace."""
         try:
             clients = k8s_client.get_clients()
             v1 = clients.get("v1") if isinstance(clients, dict) else clients[0]
 
-            svc = v1.read_namespaced_service("kube-prometheus-stack-prometheus", "monitoring")
-            if svc.spec.type != "NodePort":
-                v1.patch_namespaced_service(
-                    name="kube-prometheus-stack-prometheus",
-                    namespace="monitoring",
-                    body={
-                        "spec": {
-                            "type": "NodePort",
-                            "ports": [{"name": "http-web", "port": 9090, "targetPort": 9090, "nodePort": 30090}]
-                        }
-                    }
-                )
-                logger.info("✅ Exposed Prometheus service on NodePort 30090.")
-            else:
-                logger.info("✅ Prometheus service NodePort 30090 verified.")
+            for svc_name in ["prometheus-service", "kube-prometheus-stack-prometheus"]:
+                try:
+                    svc = v1.read_namespaced_service(svc_name, "monitoring")
+                    logger.info(f"✅ Telemetry Prometheus service '{svc_name}' verified in namespace 'monitoring'.")
+                    break
+                except Exception:
+                    continue
+
+            for loki_svc in ["loki-service", "loki"]:
+                for ns in ["monitoring", "logging-lab"]:
+                    try:
+                        svc = v1.read_namespaced_service(loki_svc, ns)
+                        logger.info(f"✅ Telemetry Loki service '{loki_svc}' verified in namespace '{ns}'.")
+                        break
+                    except Exception:
+                        continue
         except Exception as e:
-            logger.warning(f"Prometheus NodePort auto-patch warning: {str(e)}")
+            logger.warning(f"Telemetry services verification warning: {str(e)}")
 
     def _reconcile_argocd_applications(self):
         """Ensures all 9 core microservices have valid ArgoCD Application CRDs in namespace argocd."""

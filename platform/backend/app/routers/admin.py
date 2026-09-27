@@ -1,4 +1,5 @@
 # --- Administration & IAM REST Router ---
+import datetime
 from fastapi import APIRouter, Request, Query, Path, HTTPException, status, Depends
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
@@ -288,9 +289,13 @@ async def save_git_provider(request: Request, body: GitProviderPayload, admin_us
     )
     return BaseResponse(success=True, data={"status": "Saved successfully"}, request_id=request_id)
 
+def _get_cluster_id(request: Request) -> Optional[str]:
+    return request.headers.get("X-Cluster-ID") or request.query_params.get("cluster_id")
+
 @router.get("/verification", response_model=BaseResponse)
 async def get_verification(request: Request, admin_user: str = Depends(verify_admin_access)):
     request_id = getattr(request.state, "request_id", None)
+    cluster_id = _get_cluster_id(request)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
     from app.services.cluster_registry import cluster_registry
@@ -308,7 +313,7 @@ async def get_verification(request: Request, admin_user: str = Depends(verify_ad
     else:
         try:
             from app.clients.kubernetes import k8s_client
-            k8s_client.list_namespaces()
+            k8s_client.list_namespaces(cluster_id=cluster_id)
             k8s_health = "Healthy"
             k8s_msg = "Connected (API Server Healthy)"
         except Exception as e:
@@ -317,7 +322,7 @@ async def get_verification(request: Request, admin_user: str = Depends(verify_ad
 
         try:
             from app.clients.prometheus import prometheus_client
-            prometheus_client.query("up")
+            prometheus_client.query("up", cluster_id=cluster_id)
             prom_health = "Healthy"
             prom_msg = "Active (Ingested CPU/Mem metrics)"
         except Exception as e:
@@ -326,7 +331,7 @@ async def get_verification(request: Request, admin_user: str = Depends(verify_ad
 
         try:
             from app.clients.loki import loki_client
-            if loki_client._check_reachability():
+            if loki_client._check_reachability(cluster_id=cluster_id):
                 loki_health = "Healthy"
                 loki_msg = "Active (Streaming log lines)"
             else:
@@ -338,7 +343,7 @@ async def get_verification(request: Request, admin_user: str = Depends(verify_ad
 
         try:
             from app.services.argocd_service import argocd_service
-            apps = argocd_service.list_applications()
+            apps = argocd_service.list_applications(cluster_id=cluster_id)
             if apps:
                 argo_health = "Healthy"
                 argo_msg = f"Active ({len(apps)} Synced Applications)"

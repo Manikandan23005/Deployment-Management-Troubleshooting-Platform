@@ -1,4 +1,4 @@
-# --- Loki & K8s Pod Logs Aggregator Service ---
+# --- Loki & K8s Pod Logs Aggregator Service with Cluster Context ---
 import time
 from typing import List, Dict, Any, Optional
 from app.clients.loki import loki_client
@@ -7,7 +7,15 @@ from shared.exceptions import TelemetryFetchException
 from app.core.logging import logger
 
 class LogService:
-    def get_logs(self, pod_name: str, search: Optional[str] = None, limit: int = 100, scope: Optional[Any] = None, container: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_logs(
+        self,
+        pod_name: str,
+        search: Optional[str] = None,
+        limit: int = 100,
+        scope: Optional[Any] = None,
+        container: Optional[str] = None,
+        cluster_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Queries Loki log streams for pods, with live Kubernetes API log stream fallback."""
         try:
             from app.services.cluster_registry import cluster_registry
@@ -48,7 +56,7 @@ class LogService:
 
         # 2. Try Loki Query
         try:
-            res = loki_client.query_range(logql, limit=limit)
+            res = loki_client.query_range(logql, limit=limit, cluster_id=cluster_id)
             for stream in res.get("data", {}).get("result", []):
                 pod = stream.get("stream", {}).get("pod") or stream.get("stream", {}).get("app") or pod_name
                 for val in stream.get("values", []):
@@ -62,13 +70,13 @@ class LogService:
             if result:
                 return result[:limit]
         except TelemetryFetchException as e:
-            logger.info(f"Loki query warning ({str(e)}). Falling back to live Kubernetes API pod logs.")
+            logger.debug(f"Loki query note ({str(e)}). Falling back to live Kubernetes API pod logs.")
         except Exception as e:
-            logger.warning(f"Loki log parse warning ({str(e)}).")
+            logger.debug(f"Loki log parse note ({str(e)}).")
 
         # 3. Fallback to Live Kubernetes API Pod Logs
         try:
-            pods = pod_service.list_pods()
+            pods = pod_service.list_pods(cluster_id=cluster_id)
             if scope:
                 from app.services.scope_engine import scope_engine
                 target_pods = scope_engine.filter_pods(pods, scope)
@@ -84,7 +92,7 @@ class LogService:
                 p_name = p.get("podName") or p.get("name")
                 ns = p.get("namespace", "devops-nexus-prod")
                 try:
-                    logs_text = pod_service.get_pod_logs(ns, p_name, tail_lines=30, container=container)
+                    logs_text = pod_service.get_pod_logs(ns, p_name, tail_lines=30, container=container, cluster_id=cluster_id)
                     if logs_text:
                         lines = logs_text.strip().split("\n")
                         for l in lines:

@@ -1,7 +1,7 @@
 global:
   environment: "dev"
 serviceName: "auth"
-replicaCount: 3
+replicaCount: 1
 containerPort: 8000
 image:
   repository: "auth"
@@ -18,7 +18,7 @@ resources:
     cpu: "50m"
     memory: "64Mi"
 hpa:
-  minReplicas: 3
+  minReplicas: 1
   maxReplicas: 10
   targetCPU: 80
 ingress:

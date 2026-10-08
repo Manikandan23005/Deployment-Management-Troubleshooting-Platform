@@ -1,8 +1,9 @@
 # --- Observability REST Router with Cluster Routing ---
 from fastapi import APIRouter, Request, Query, HTTPException, status, Depends
 from typing import Optional
-from app.schemas.responses import BaseResponse
+from app.schemas.responses import BaseResponse, ErrorDetail
 from app.services.monitoring_service import monitoring_service
+from app.core.logging import logger
 from app.services.log_service import log_service
 from app.services.scope_engine import scope_engine
 from shared.exceptions import TelemetryFetchException
@@ -33,14 +34,16 @@ async def get_cluster_metrics(
         data = monitoring_service.get_cluster_metrics(scope, cluster_id=cluster_id)
         return BaseResponse(success=True, data=data, request_id=request_id)
     except Exception as e:
+        logger.error(f"Cluster metrics fetch failed: {str(e)}")
         return BaseResponse(
-            success=True,
+            success=False,
             data={
                 "cpu_utilization": 0.0,
                 "memory_utilization": 0.0,
                 "disk_utilization": 0.0,
                 "network_throughput_bytes": 0.0
             },
+            error=ErrorDetail(code="METRICS_FETCH_ERROR", message=str(e)),
             request_id=request_id
         )
 
@@ -62,7 +65,13 @@ async def get_metrics_range(
         data = monitoring_service.get_performance_range(metric_type, scope, time_range, cluster_id=cluster_id)
         return BaseResponse(success=True, data={"values": data or []}, request_id=request_id)
     except Exception as e:
-        return BaseResponse(success=True, data={"values": []}, request_id=request_id)
+        logger.error(f"Metrics range fetch failed: {str(e)}")
+        return BaseResponse(
+            success=False,
+            data={"values": []},
+            error=ErrorDetail(code="METRICS_FETCH_ERROR", message=str(e)),
+            request_id=request_id
+        )
 
 @router.get("/logs", response_model=BaseResponse)
 async def get_logs(
@@ -84,7 +93,13 @@ async def get_logs(
         data = log_service.get_logs(pod, search=search, limit=limit, scope=scope, container=container, cluster_id=cluster_id)
         return BaseResponse(success=True, data=data or [], request_id=request_id)
     except Exception as e:
-        return BaseResponse(success=True, data=[], request_id=request_id)
+        logger.error(f"Log fetch failed: {str(e)}")
+        return BaseResponse(
+            success=False,
+            data=[],
+            error=ErrorDetail(code="LOG_FETCH_ERROR", message=str(e)),
+            request_id=request_id
+        )
 
 @router.get("/platform-metrics", response_model=BaseResponse)
 async def get_platform_metrics(request: Request):
@@ -112,4 +127,10 @@ async def get_alerts(
         alerts = monitoring_service.get_active_alerts(scope, cluster_id=cluster_id)
         return BaseResponse(success=True, data=alerts or [], request_id=request_id)
     except Exception as e:
-        return BaseResponse(success=True, data=[], request_id=request_id)
+        logger.error(f"Alerts fetch failed: {str(e)}")
+        return BaseResponse(
+            success=False,
+            data=[],
+            error=ErrorDetail(code="ALERTS_FETCH_ERROR", message=str(e)),
+            request_id=request_id
+        )

@@ -146,4 +146,7 @@ first-load 401 no longer triggers a full-page reload.
    in its deps.
 
 ## 9. Commits
-<!-- filled in after commit -->
+
+- `1defa8a` — fix(frontend): gate page fetches on cluster readiness and hot-reload container
+  (10 files changed, 301 insertions(+), 26 deletions(-)). gitleaks pre-commit hook ran and
+  reported "no leaks found" — NOT bypassed. Pushed to `origin main`.

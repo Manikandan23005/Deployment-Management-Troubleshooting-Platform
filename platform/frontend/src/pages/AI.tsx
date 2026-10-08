@@ -22,8 +22,8 @@ const INITIAL_ID = 'msg_initial';
 const INITIAL_MESSAGE: ChatMessage = {
   id: INITIAL_ID,
   sender: 'ai',
-  text: '### 👋 DevOps Nexus Live Kubernetes Assistant (Jarvis)\n\nI am your live cluster intelligence copilot powered by **AWS Bedrock**. I can analyze live telemetry, diagnose pod failures, suggest production-grade remediations, and explain complex Kubernetes architecture.\n\n- 📊 **Live Workloads & GitOps:** Pod statuses, restart counts, ArgoCD sync states, and node capacity.\n- 🔬 **Root Cause Analysis:** Container termination exit codes (OOMKilled 137, CrashLoopBackOff), probe failures, and Loki logs.\n- 🛠️ **Remediation Runbooks:** Actionable `kubectl` diagnostic commands, GitOps patch manifests, and rolling updates.\n- 🏛️ **Kubernetes Architecture:** Ingress vs Services, HPA/VPA/Karpenter autoscaling, StorageClasses, and RBAC matrix.\n\n*Try one of the suggested prompts below or ask any Kubernetes question!*',
-  displayedText: '### 👋 DevOps Nexus Live Kubernetes Assistant (Jarvis)\n\nI am your live cluster intelligence copilot powered by **AWS Bedrock**. I can analyze live telemetry, diagnose pod failures, suggest production-grade remediations, and explain complex Kubernetes architecture.\n\n- 📊 **Live Workloads & GitOps:** Pod statuses, restart counts, ArgoCD sync states, and node capacity.\n- 🔬 **Root Cause Analysis:** Container termination exit codes (OOMKilled 137, CrashLoopBackOff), probe failures, and Loki logs.\n- 🛠️ **Remediation Runbooks:** Actionable `kubectl` diagnostic commands, GitOps patch manifests, and rolling updates.\n- 🏛️ **Kubernetes Architecture:** Ingress vs Services, HPA/VPA/Karpenter autoscaling, StorageClasses, and RBAC matrix.\n\n*Try one of the suggested prompts below or ask any Kubernetes question!*',
+  text: '### 👋 DevOps Nexus Live Kubernetes Assistant (Jarvis)\n\nI am your live cluster intelligence copilot powered by **Groq (Llama / GPT-OSS)**. I can analyze live telemetry, diagnose pod failures, suggest production-grade remediations, and explain complex Kubernetes architecture.\n\n- 📊 **Live Workloads & GitOps:** Pod statuses, restart counts, ArgoCD sync states, and node capacity.\n- 🔬 **Root Cause Analysis:** Container termination exit codes (OOMKilled 137, CrashLoopBackOff), probe failures, and Loki logs.\n- 🛠️ **Remediation Runbooks:** Actionable `kubectl` diagnostic commands, GitOps patch manifests, and rolling updates.\n- 🏛️ **Kubernetes Architecture:** Ingress vs Services, HPA/VPA/Karpenter autoscaling, StorageClasses, and RBAC matrix.\n\n*Try one of the suggested prompts below or ask any Kubernetes question!*',
+  displayedText: '### 👋 DevOps Nexus Live Kubernetes Assistant (Jarvis)\n\nI am your live cluster intelligence copilot powered by **Groq (Llama / GPT-OSS)**. I can analyze live telemetry, diagnose pod failures, suggest production-grade remediations, and explain complex Kubernetes architecture.\n\n- 📊 **Live Workloads & GitOps:** Pod statuses, restart counts, ArgoCD sync states, and node capacity.\n- 🔬 **Root Cause Analysis:** Container termination exit codes (OOMKilled 137, CrashLoopBackOff), probe failures, and Loki logs.\n- 🛠️ **Remediation Runbooks:** Actionable `kubectl` diagnostic commands, GitOps patch manifests, and rolling updates.\n- 🏛️ **Kubernetes Architecture:** Ingress vs Services, HPA/VPA/Karpenter autoscaling, StorageClasses, and RBAC matrix.\n\n*Try one of the suggested prompts below or ask any Kubernetes question!*',
   isTyping: false,
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 };
@@ -323,7 +323,8 @@ const AI: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [bedrockModel, setBedrockModel] = useState('us.anthropic.claude-3-5-sonnet-20241022-v2:0');
+  // Model selection is advisory; the active provider/model is driven by the backend (AI_PROVIDER / LLM_MODEL).
+  const [aiModel, setAiModel] = useState('openai/gpt-oss-120b');
   const [progressStatus, setProgressStatus] = useState<string>('');
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
@@ -433,11 +434,11 @@ const AI: React.FC = () => {
         setLoading(false);
         setProgressStatus('');
       }
-    }, 3500);
+    }, 60000);
 
     api.askAIStream(
       text,
-      'bedrock',
+      'groq',
       sessionId,
       getScopeParams(),
       (status) => {
@@ -484,7 +485,7 @@ const AI: React.FC = () => {
         setLoading(false);
         setProgressStatus('');
       },
-      bedrockModel
+      aiModel
     );
   };
 
@@ -509,7 +510,7 @@ const AI: React.FC = () => {
             <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
               DevOps Nexus Live Kubernetes Assistant
               <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                AWS Bedrock Jarvis
+                Groq Jarvis
               </span>
               <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
                 {getScopeLabel()} Scope
@@ -521,16 +522,15 @@ const AI: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400 font-semibold">Bedrock Model:</label>
+            <label className="text-xs text-slate-400 font-semibold">Groq Model:</label>
             <select 
-              value={bedrockModel}
-              onChange={(e) => setBedrockModel(e.target.value)}
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
               className="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none font-medium cursor-pointer"
             >
-              <option value="us.anthropic.claude-3-5-sonnet-20241022-v2:0">Anthropic Claude 3.5 Sonnet</option>
-              <option value="amazon.nova-pro-v1:0">Amazon Nova Pro</option>
-              <option value="amazon.nova-lite-v1:0">Amazon Nova Lite</option>
-              <option value="us.meta.llama3-3-70b-instruct-v1:0">Meta Llama 3.3 70B</option>
+              <option value="openai/gpt-oss-120b">GPT-OSS 120B (quality)</option>
+              <option value="openai/gpt-oss-20b">GPT-OSS 20B (fast)</option>
+              <option value="qwen/qwen3.8-27b">Qwen 3 27B</option>
             </select>
           </div>
 

@@ -323,7 +323,7 @@ export const api = {
     try {
       const payload: any = {
         prompt,
-        provider: provider || 'bedrock',
+        provider: provider || 'groq',
         session_id: sessionId,
         model
       };
@@ -335,7 +335,7 @@ export const api = {
       }
 
       const response = await apiClient.post('/api/v1/ai/chat', payload, {
-        timeout: 25000
+        timeout: 60000
       });
 
       if (response.data && response.data.success) {

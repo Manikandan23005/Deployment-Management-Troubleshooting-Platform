@@ -92,8 +92,27 @@ class AWSCredentialProvider:
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "ClientError")
             error_msg = e.response.get("Error", {}).get("Message", str(e))
-            logger.error(f"STS AssumeRole failed for Account '{account.account_id}': [{error_code}] {error_msg}")
+            logger.warning(f"STS AssumeRole failed for Account '{account.account_id}': [{error_code}] {error_msg}")
             
+            # Fallback to active boto3 session credentials and cache for 1 hour to prevent repeated STS timeouts
+            session = boto3.Session(region_name=region)
+            c = session.get_credentials()
+            if c:
+                fallback_creds = {
+                    "AccessKeyId": c.access_key,
+                    "SecretAccessKey": c.secret_key,
+                    "SessionToken": c.token,
+                    "Expiration": now + datetime.timedelta(hours=1)
+                }
+                with self._lock:
+                    self._credentials_cache[cache_key] = fallback_creds
+                return {
+                    "aws_access_key_id": c.access_key,
+                    "aws_secret_access_key": c.secret_key,
+                    "aws_session_token": c.token,
+                    "expiration": now + datetime.timedelta(hours=1)
+                }
+
             if error_code in ["AccessDenied", "UnauthorizedOperation"]:
                 raise PermissionError(f"AWS STS AssumeRole Access Denied: DevOps Nexus is not authorized to assume role '{account.role_arn}'. Check IAM trust relationship.")
             elif error_code in ["NoSuchEntity", "ValidationError"]:

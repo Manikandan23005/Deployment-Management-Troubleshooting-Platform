@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Cloud, Plus, RefreshCw, CheckCircle2, XCircle, AlertTriangle, 
-  Trash2, ShieldCheck, Server, ArrowRight, ExternalLink,
-  Lock, Globe, Check, Info, ChevronDown, ChevronRight
+  Trash2, ShieldCheck, Server, ArrowRight,
+  Lock, Globe, Info, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Loading } from '../components/Loading';

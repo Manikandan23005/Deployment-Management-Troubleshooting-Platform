@@ -30,12 +30,8 @@ class PrometheusClient:
 
             # Candidate services in monitoring namespace
             candidates = [
-                ("monitoring", "prometheus-service:web"),
                 ("monitoring", "prometheus-service:9090"),
-                ("monitoring", "kube-prometheus-stack-prometheus:http-web"),
-                ("monitoring", "kube-prometheus-stack-prometheus:9090"),
-                ("monitoring", "prometheus-k8s:web"),
-                ("default", "prometheus-service:9090")
+                ("monitoring", "prometheus-service:web")
             ]
             if self._working_candidate:
                 ordered_candidates = [self._working_candidate] + [c for c in candidates if c != self._working_candidate]
@@ -75,7 +71,7 @@ class PrometheusClient:
     def _check_reachability(self, cluster_id: Optional[str] = None) -> bool:
         """Fast non-blocking reachability check supporting both direct HTTP and Kubernetes service proxy."""
         now = time.time()
-        if (now - self._last_check_time < 20.0) and self._is_reachable:
+        if (now - self._last_check_time < 30.0):
             return self._is_reachable
 
         try:

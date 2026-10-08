@@ -300,76 +300,51 @@ export const api = {
     };
   },
 
-  askAIStream: (
+  askAIStream: async (
     prompt: string,
     provider: string,
     sessionId: string,
     scopeParams: Record<string, string> | undefined,
     onProgress: (status: string) => void,
     onDone: (data: AIResponse) => void,
-    onError: (err: any) => void
+    onError: (err: any) => void,
+    model?: string
   ) => {
-    const baseUrl = apiClient.defaults.baseURL || '';
-    const token = localStorage.getItem('session_token') || '';
-    const params = new URLSearchParams(scopeParams || {});
-    params.append('prompt', prompt);
-    params.append('provider', provider);
-    params.append('session_id', sessionId);
-    params.append('token', token);
-    const url = `${baseUrl}/api/v1/ai/chat/stream?${params.toString()}`;
-    const eventSource = new EventSource(url);
-
-    let completed = false;
-    const timeoutId = setTimeout(() => {
-      if (!completed) {
-        completed = true;
-        onError(new Error("AI Diagnostic request timed out. Infrastructure connection offline."));
-        eventSource.close();
+    onProgress("Inspecting live cluster telemetry & workloads...");
+    try {
+      const payload: any = {
+        prompt,
+        provider: provider || 'bedrock',
+        session_id: sessionId,
+        model
+      };
+      if (scopeParams) {
+        if (scopeParams.mode) payload.scope_mode = scopeParams.mode;
+        if (scopeParams.namespace) payload.scope_namespace = scopeParams.namespace;
+        if (scopeParams.app) payload.scope_app = scopeParams.app;
+        if (scopeParams.domain) payload.scope_domain = scopeParams.domain;
       }
-    }, 20000);
 
-    eventSource.addEventListener('progress', (e: any) => {
-      try {
-        const payload = JSON.parse(e.data);
-        onProgress(payload.status);
-      } catch (err) {
-        console.error('Failed to parse progress event:', err);
-      }
-    });
+      const response = await apiClient.post('/api/v1/ai/chat', payload, {
+        timeout: 25000
+      });
 
-    eventSource.addEventListener('done', (e: any) => {
-      completed = true;
-      clearTimeout(timeoutId);
-      try {
-        const payload = JSON.parse(e.data);
-        // Map keys to match TS expectations if they differ
+      if (response.data && response.data.success) {
+        const data = response.data.data;
         const finalResponse: AIResponse = {
-          ...payload,
-          analysis: payload.root_cause || payload.analysis || '',
-          recommendation: payload.recommendations || payload.recommendation || []
+          ...data,
+          analysis: data.root_cause || data.analysis || '',
+          recommendation: data.recommendations || data.recommendation || []
         };
         onDone(finalResponse);
-        eventSource.close();
-      } catch (err) {
-        onError(err);
-        eventSource.close();
+      } else {
+        const errMessage = response.data?.error?.message || "Failed to receive AI response from cluster.";
+        onError(new Error(errMessage));
       }
-    });
-
-    eventSource.onerror = (err) => {
-      if (!completed) {
-        completed = true;
-        clearTimeout(timeoutId);
-        onError(new Error("AI stream disconnected. Please verify backend connection."));
-        eventSource.close();
-      }
-    };
-
-    return () => {
-      completed = true;
-      clearTimeout(timeoutId);
-      eventSource.close();
-    };
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.detail || err.message || "Failed to connect to AI engine.";
+      onError(new Error(msg));
+    }
   },
 
   restartDeployment: async (namespace: string, name: string): Promise<boolean> => {

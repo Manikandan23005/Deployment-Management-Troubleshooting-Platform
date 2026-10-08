@@ -161,8 +161,24 @@ class ContextBuilder:
         active_cluster_data = default_cluster or (clusters_list[0] if clusters_list else None)
         active_cid = active_cluster_data.get("id") if isinstance(active_cluster_data, dict) else getattr(current_scope, "cluster_id", None)
 
-        # 2. Kubernetes Metadata Store (Pods, Nodes, Deployments, Namespaces)
-        raw_pods = self._get_pods(cluster_id=active_cid)
+        # 2. Parallelized Kubernetes & Telemetry Metadata Collection
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            fut_pods = executor.submit(self._get_pods, active_cid)
+            fut_nodes = executor.submit(self._get_nodes, active_cid)
+            fut_deps = executor.submit(self._get_deployments, active_cid)
+            fut_ns = executor.submit(self._get_namespaces, active_cid)
+            fut_metrics = executor.submit(self._get_metrics, current_scope)
+            fut_apps = executor.submit(self._get_argocd_apps)
+
+            raw_pods = fut_pods.result()
+            raw_nodes = fut_nodes.result()
+            raw_deps = fut_deps.result()
+            raw_ns = fut_ns.result()
+            raw_metrics = fut_metrics.result()
+            raw_apps = fut_apps.result()
+
         has_connected_cluster = len(clusters_list) > 0 or len(aws_accounts) > 0 or len(raw_pods) > 0
 
         cluster_info = {
@@ -183,14 +199,9 @@ class ContextBuilder:
         gitops_pods = [p for p in pods if p.get("gitopsManaged") is True or p.get("manager") == "ArgoCD" or p.get("namespace") == "devops-nexus-prod"]
         k8s_managed_pods = [p for p in pods if p not in gitops_pods]
 
-        raw_nodes = self._get_nodes(cluster_id=active_cid) if has_connected_cluster else []
-        raw_deps = self._get_deployments(cluster_id=active_cid) if has_connected_cluster else []
         deps = scope_engine.filter_deployments(raw_deps, current_scope) if raw_deps else []
-        
         gitops_deployments = [d for d in deps if d.get("gitopsManaged") is True or d.get("is_gitops") is True or d.get("namespace") == "devops-nexus-prod"]
         k8s_deployments = [d for d in deps if d not in gitops_deployments]
-        
-        raw_ns = self._get_namespaces(cluster_id=active_cid) if has_connected_cluster else []
 
         # Breakdown by namespace
         ns_map = {}
@@ -199,12 +210,30 @@ class ContextBuilder:
             ns_map[ns_name] = ns_map.get(ns_name, 0) + 1
 
         # 3. Target Service / Pod Logs Collection
-        resolved_service = session_manager.resolve_target_service(session_id, prompt)
-        targeted_logs = ""
-        if has_connected_cluster and (resolved_service or "log" in prompt.lower() or "error" in prompt.lower()):
+        import re
+        requested_tail_lines = 50
+        line_count_match = re.search(r'(\d+)\s*(?:log|line|row|entry|entries)', prompt.lower())
+        if line_count_match:
             try:
-                target_pod_name = None
-                target_ns = current_scope.namespace or "devops-nexus-prod"
+                requested_tail_lines = max(1, min(100, int(line_count_match.group(1))))
+            except Exception:
+                pass
+
+        resolved_service = session_manager.resolve_target_service(session_id, prompt)
+        if not resolved_service:
+            # Check prompt for microservice keywords
+            prompt_lower = prompt.lower()
+            for svc_kw in ["frontend", "gateway", "auth", "products", "orders", "payment", "notification", "users", "prometheus", "loki", "argocd"]:
+                if svc_kw in prompt_lower:
+                    resolved_service = svc_kw
+                    break
+
+        targeted_logs = ""
+        target_pod_name = None
+        target_ns = getattr(current_scope, "namespace", None) or "devops-nexus-prod"
+        is_log_query = any(w in prompt.lower() for w in ["log", "logs", "loki", "trace", "traces", "stdout", "stderr", "stacktrace", "crashlog"])
+        if has_connected_cluster and is_log_query:
+            try:
                 if resolved_service:
                     for p in pods:
                         p_name = p.get("name") or p.get("podName", "")
@@ -222,12 +251,19 @@ class ContextBuilder:
                         target_ns = pods[0].get("namespace", target_ns)
 
                 if target_pod_name:
-                    targeted_logs = pod_service.get_pod_logs(target_ns, target_pod_name, tail_lines=50)
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(pod_service.get_pod_logs, target_ns, target_pod_name, tail_lines=requested_tail_lines)
+                        try:
+                            targeted_logs = future.result(timeout=1.0)
+                        except concurrent.futures.TimeoutError:
+                            targeted_logs = ""
+                        except Exception as ex:
+                            targeted_logs = f"Log fetch note: {str(ex)}"
             except Exception as e:
                 targeted_logs = f"Log fetch exception: {str(e)}"
 
         # 4. Telemetry Metrics
-        raw_metrics = self._get_metrics()
         metrics = {
             "cpu_utilization": round(raw_metrics.get("cpu_utilization", 0.0), 1),
             "memory_utilization": round(raw_metrics.get("memory_utilization", 0.0), 1),
@@ -292,6 +328,9 @@ class ContextBuilder:
                 "namespaces": [n.get("name") if isinstance(n, dict) else n for n in raw_ns[:10]]
             },
             "targeted_logs": targeted_logs if targeted_logs else "No pod logs requested or cluster unconfigured.",
+            "targeted_pod": target_pod_name or "None",
+            "targeted_namespace": target_ns or "devops-nexus-prod",
+            "requested_tail_lines": requested_tail_lines,
             "metrics": metrics,
             "gitops_applications": [{"name": a.get("name"), "sync_status": a.get("sync_status"), "health_status": a.get("health_status"), "repo": a.get("repo"), "path": a.get("path")} for a in apps],
             "platform_security_and_admin": {

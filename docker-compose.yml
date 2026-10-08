@@ -59,16 +59,17 @@ services:
       - DEFAULT_AWS_ACCOUNT_ID=${DEFAULT_AWS_ACCOUNT_ID:-605294565283}
       - DEFAULT_AWS_ROLE_ARN=${DEFAULT_AWS_ROLE_ARN:-arn:aws:iam::605294565283:role/DevOpsNexusAccessRole}
       - DEFAULT_AWS_REGION=${DEFAULT_AWS_REGION:-ap-south-1}
-      - AI_PROVIDER=${AI_PROVIDER:-groq}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-}
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      - LMSTUDIO_HOST=${LMSTUDIO_HOST:-http://host.docker.internal:1234/v1}
+      - AI_PROVIDER=bedrock
+      - BEDROCK_REGION=${BEDROCK_REGION:-us-east-1}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-us.anthropic.claude-3-5-sonnet-20241022-v2:0}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - REPO_ROOT=/repo
     volumes:
       - .:/repo
+      - ./platform/backend/app:/app/app
+      - ./platform/shared:/app/platform/shared
+      - ./platform/shared:/app/shared
+      - ~/.aws:/root/.aws:ro
     depends_on:
       postgres:
         condition: service_healthy

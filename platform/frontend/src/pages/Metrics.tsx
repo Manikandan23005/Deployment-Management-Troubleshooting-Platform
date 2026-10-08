@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { Loading } from '../components/Loading';
 import { useScope } from '../context/ScopeContext';
 import { useCluster } from '../context/ClusterContext';
-import { Cpu, HardDrive, Activity, Wifi, Layers, Clock, AlertTriangle, RefreshCw, BarChart3, Radio, Server, Cloud, Plus } from 'lucide-react';
+import { Cpu, HardDrive, Activity, Wifi, Layers, Clock, AlertTriangle, RefreshCw, BarChart3, Radio, Server, Cloud } from 'lucide-react';
 
 interface MetricChartConfig {
   id: string;

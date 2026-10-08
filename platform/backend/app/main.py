@@ -18,7 +18,6 @@ from app.routers.ai import router as ai_router
 # Setup logger configurations on startup
 setup_logging()
 
-from app.services.port_supervisor import port_supervisor
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -37,6 +36,12 @@ async def startup_event():
         platform_initializer.initialize_platform()
     except Exception as e:
         setup_logging().warning(f"Platform initializer failed on startup: {str(e)}")
+
+    try:
+        from app.services.cluster_state_cache import cluster_state_cache
+        cluster_state_cache.start_background_daemon()
+    except Exception as e:
+        setup_logging().warning(f"Failed to start ClusterStateCache daemon: {str(e)}")
 
 # Exception handlers for request/response validation and uniform error formats
 @app.exception_handler(HTTPException)

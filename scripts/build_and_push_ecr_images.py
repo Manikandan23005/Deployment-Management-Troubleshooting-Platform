@@ -78,6 +78,7 @@ def build_and_push_all(dry_run: bool = False):
         # 1. Build linux/amd64 image
         build_cmd = [
             "docker", "build",
+            "--no-cache",
             "--platform", "linux/amd64",
             "-f", app["dockerfile"],
             "-t", tagged_img,

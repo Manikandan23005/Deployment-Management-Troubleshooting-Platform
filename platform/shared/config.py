@@ -19,13 +19,15 @@ class PlatformSettings(BaseSettings):
     GITHUB_REPO: str = "Manikandan23005/Deployment-Management-Troubleshooting-Platform"
     
     # AI Engine Settings
-    AI_PROVIDER: str = "ollama"
+    AI_PROVIDER: str = "bedrock"
     OLLAMA_HOST: str = "http://localhost:11434"
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     GROQ_API_KEY: str = ""
     LMSTUDIO_HOST: str = "http://localhost:1234/v1"
     LLM_MODEL: str = "llama-3.3-70b-versatile"
+    BEDROCK_REGION: str = "us-east-1"
+    BEDROCK_MODEL_ID: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     
     # Caching
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -3,7 +3,6 @@ import { api } from '../services/api';
 import { Save, GitBranch, Shield, Check } from 'lucide-react';
 
 const Settings: React.FC = () => {
-  const [provider, setProvider] = useState('ollama');
   const [k8sConfig, setK8sConfig] = useState('~/.kube/config');
 
   // Git Settings State
@@ -170,37 +169,38 @@ const Settings: React.FC = () => {
           </div>
         </form>
 
-        {/* AI Provider Section */}
+        {/* Dedicated AWS Bedrock Engine Section */}
         <div className="glass-panel p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 space-y-4">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Pluggable AI Diagnostics Provider</h3>
-          
-          <div className="space-y-1">
-            <label className="text-xs text-slate-500 font-semibold block">AI Provider Engine</label>
-            <select 
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:border-blue-500"
-            >
-              <option value="ollama">Ollama (Local LLM)</option>
-              <option value="openai">OpenAI (Remote GPT)</option>
-              <option value="groq">Groq (Llama-3 API)</option>
-              <option value="lmstudio">LM Studio (Local endpoint)</option>
-            </select>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">AWS Bedrock Dedicated AI Engine</h3>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              AWS BEDROCK EXCLUSIVE
+            </span>
           </div>
-
-          {provider === 'ollama' && (
-            <div className="space-y-1 pt-2">
-              <label className="text-xs text-slate-500 font-semibold block">Ollama Endpoint URL</label>
-              <input type="text" placeholder="http://localhost:11434" className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm" />
+          
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-2 text-xs">
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Bedrock Provider Service:</span>
+              <span className="font-bold text-amber-400">AWS Bedrock Runtime Converse API</span>
             </div>
-          )}
-
-          {provider === 'openai' && (
-            <div className="space-y-1 pt-2">
-              <label className="text-xs text-slate-500 font-semibold block">OpenAI API Key</label>
-              <input type="password" placeholder="sk-..." className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm" />
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Target Region:</span>
+              <span className="font-mono text-slate-200 font-semibold">us-east-1 (US East - N. Virginia)</span>
             </div>
-          )}
+            <div className="flex items-center justify-between text-slate-400">
+              <span>AWS Account ID:</span>
+              <span className="font-mono text-slate-200 font-semibold">605294565283</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Primary Foundation Model:</span>
+              <span className="font-mono text-blue-400 font-bold">Anthropic Claude 3.5 Sonnet</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-400">
+              <span>Supported Bedrock Models:</span>
+              <span className="text-slate-300">Claude 3.5 Sonnet, Amazon Nova Pro, Amazon Nova Lite, Meta Llama 3.3 70B</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

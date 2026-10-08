@@ -26,6 +26,7 @@ interface ClusterContextType {
   setActiveCluster: (cluster: ClusterItem) => void;
   refreshClusters: () => Promise<void>;
   loading: boolean;
+  initialized: boolean;
 }
 
 const ClusterContext = createContext<ClusterContextType | undefined>(undefined);
@@ -34,6 +35,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [clusters, setClusters] = useState<ClusterItem[]>([]);
   const [activeCluster, setActiveClusterState] = useState<ClusterItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [initialized, setInitialized] = useState<boolean>(false);
 
   const refreshClusters = async () => {
     try {
@@ -69,6 +71,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
       setActiveClusterState(null);
     } finally {
       setLoading(false);
+      setInitialized(true);
     }
   };
 
@@ -87,7 +90,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, []);
 
   return (
-    <ClusterContext.Provider value={{ activeCluster, clusters, setActiveCluster, refreshClusters, loading }}>
+    <ClusterContext.Provider value={{ activeCluster, clusters, setActiveCluster, refreshClusters, loading, initialized }}>
       {children}
     </ClusterContext.Provider>
   );

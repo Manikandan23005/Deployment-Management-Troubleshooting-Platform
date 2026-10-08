@@ -107,6 +107,15 @@ class KubernetesClientFactory:
                         "authentication_type": "Kubeconfig",
                         "status": "CONNECTED"
                     }
+            elif not cluster:
+                # Graceful resilience: If the client passed an outdated or invalid cluster ID (e.g. from localStorage),
+                # fallback to the default active cluster rather than failing with 0 nodes / 0 pods.
+                logger.warning(f"Cluster ID '{target_cid}' not found in registry. Falling back to active default cluster.")
+                cluster = cluster_registry.get_default_cluster()
+                if not cluster:
+                    all_clusters = cluster_registry.list_clusters()
+                    if all_clusters:
+                        cluster = all_clusters[0]
         else:
             default_cluster_data = cluster_registry.get_default_cluster()
             if default_cluster_data:

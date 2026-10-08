@@ -28,12 +28,8 @@ const Overview: React.FC = () => {
     try {
       const scopeParams = getScopeParams();
       
-      const appsPromise = isConnected 
-        ? api.getApplications(scopeParams).catch(() => []) 
-        : Promise.resolve([]);
-      const metricsPromise = isConnected 
-        ? api.getClusterMetrics(scopeParams).catch(() => ({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 }))
-        : Promise.resolve({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
+      const appsPromise = api.getApplications(scopeParams).catch(() => []);
+      const metricsPromise = api.getClusterMetrics(scopeParams).catch(() => ({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 }));
       const gitPromise = api.getGitHubDetails().catch(() => ({
         owner: 'Manikandan23005',
         repository: 'Deployment-Management-Troubleshooting-Platform',
@@ -65,16 +61,15 @@ const Overview: React.FC = () => {
       setLoading(false);
     }, 2000);
     return () => clearTimeout(safetyTimer);
-  }, [isConnected, JSON.stringify(getScopeParams())]);
+  }, [activeCluster?.id, isConnected, JSON.stringify(getScopeParams())]);
 
-  // Real-time auto-refresh interval: 10 seconds (only if cluster is connected)
+  // Real-time auto-refresh interval: 10 seconds
   useEffect(() => {
-    if (!isConnected) return;
     const timer = setInterval(() => {
       fetchDashboardData(true);
     }, 10000);
     return () => clearInterval(timer);
-  }, [isConnected, JSON.stringify(getScopeParams())]);
+  }, [activeCluster?.id, JSON.stringify(getScopeParams())]);
 
   const appColumns = [
     { header: 'Workload', accessor: 'name' as const },
@@ -106,8 +101,19 @@ const Overview: React.FC = () => {
           <p className="text-sm text-slate-400 mt-1">Real-time telemetry streams from Prometheus, Loki and ArgoCD.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {refreshing && <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />}
+          {activeCluster ? (
+            <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{activeCluster.name}</span>
+              <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-emerald-500/20">{activeCluster.provider}</span>
+            </span>
+          ) : (
+            <span className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 text-xs font-semibold">
+              Connecting Cluster...
+            </span>
+          )}
           <span className="px-3.5 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-500 text-xs font-bold">
             {getScopeLabel()}
           </span>

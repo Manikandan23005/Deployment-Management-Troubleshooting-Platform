@@ -4,10 +4,12 @@ import { Loading } from '../components/Loading';
 import { api } from '../services/api';
 import { NodeInfo } from '../types';
 import { Server, Plus, RefreshCw } from 'lucide-react';
+import { useCluster } from '../context/ClusterContext';
 
 const Nodes: React.FC = () => {
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const { activeCluster } = useCluster();
 
   const fetchNodes = async () => {
     setLoading(true);
@@ -24,7 +26,7 @@ const Nodes: React.FC = () => {
 
   useEffect(() => {
     fetchNodes();
-  }, []);
+  }, [activeCluster?.id]);
 
   const columns = [
     { header: 'Node Name', accessor: 'name' as const },

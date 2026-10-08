@@ -64,12 +64,49 @@ export const AWSAccountsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  const { refreshClusters, clusters } = useCluster();
+
+  const handleDiscoverClusters = async (account: AWSAccount) => {
+    setDiscoveringId(account.id);
+    setExpandedAccountIds(prev => ({ ...prev, [account.id]: true }));
+    try {
+      const res = await api.discoverEKSClusters(account.id, account.default_region);
+      if (res.data && res.data.success) {
+        const rawClusters = Array.isArray(res.data.data) 
+          ? res.data.data 
+          : (res.data.data?.clusters || []);
+        setClustersByAccount(prev => ({
+          ...prev,
+          [account.id]: rawClusters
+        }));
+      }
+    } catch (e: any) {
+      console.error('Failed to discover EKS clusters:', e);
+      alert(`EKS Discovery Failed: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setDiscoveringId(null);
+    }
+  };
+
   const fetchAccounts = async () => {
     setLoading(true);
     try {
       const res = await api.getAWSAccounts();
       if (res.data && res.data.success) {
-        setAccounts(res.data.data);
+        const accountsList: AWSAccount[] = res.data.data;
+        setAccounts(accountsList);
+
+        // Automatically expand connected accounts and auto-fetch their EKS clusters on load
+        if (accountsList.length > 0) {
+          const autoExpand: Record<string, boolean> = {};
+          accountsList.forEach(acc => {
+            if (acc.status === 'CONNECTED' || accountsList.length === 1) {
+              autoExpand[acc.id] = true;
+              handleDiscoverClusters(acc);
+            }
+          });
+          setExpandedAccountIds(prev => ({ ...prev, ...autoExpand }));
+        }
       }
     } catch (e: any) {
       console.error('Failed to fetch AWS accounts:', e);
@@ -115,30 +152,6 @@ export const AWSAccountsPage: React.FC = () => {
       }));
     } finally {
       setTestingId(null);
-    }
-  };
-
-  const { refreshClusters } = useCluster();
-
-  const handleDiscoverClusters = async (account: AWSAccount) => {
-    setDiscoveringId(account.id);
-    setExpandedAccountIds(prev => ({ ...prev, [account.id]: true }));
-    try {
-      const res = await api.discoverEKSClusters(account.id, account.default_region);
-      if (res.data && res.data.success) {
-        const rawClusters = Array.isArray(res.data.data) 
-          ? res.data.data 
-          : (res.data.data?.clusters || []);
-        setClustersByAccount(prev => ({
-          ...prev,
-          [account.id]: rawClusters
-        }));
-      }
-    } catch (e: any) {
-      console.error('Failed to discover EKS clusters:', e);
-      alert(`EKS Discovery Failed: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setDiscoveringId(null);
     }
   };
 
@@ -465,6 +478,11 @@ export const AWSAccountsPage: React.FC = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {discoveredClusters.map((cluster) => {
                           const isReg = registeringCluster === `${account.id}-${cluster.name}`;
+                          const isTarget = clusters.some(c => 
+                            c.name === `eks-${cluster.name}` || 
+                            c.name === cluster.name || 
+                            c.id === `cluster-eks-${cluster.name}`
+                          );
                           return (
                             <div 
                               key={cluster.name}
@@ -483,7 +501,7 @@ export const AWSAccountsPage: React.FC = () => {
                                   cluster.status === 'ACTIVE' 
                                     ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
                                     : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                                }`}>
+                                }}`}>
                                   {cluster.status}
                                 </span>
                               </div>
@@ -514,18 +532,25 @@ export const AWSAccountsPage: React.FC = () => {
                                   Uses short-lived STS bearer token
                                 </span>
                                 
-                                <button
-                                  onClick={() => handleRegisterEKSTarget(account, cluster.name)}
-                                  disabled={isReg || cluster.status !== 'ACTIVE'}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
-                                >
-                                  {isReg ? (
-                                    <RefreshCw className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <ArrowRight className="h-3 w-3" />
-                                  )}
-                                  {isReg ? 'Registering...' : 'Register as Target'}
-                                </button>
+                                {isTarget ? (
+                                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    <span>Active Target</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleRegisterEKSTarget(account, cluster.name)}
+                                    disabled={isReg || cluster.status !== 'ACTIVE'}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+                                  >
+                                    {isReg ? (
+                                      <RefreshCw className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <ArrowRight className="h-3 w-3" />
+                                    )}
+                                    {isReg ? 'Registering...' : 'Register as Target'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );

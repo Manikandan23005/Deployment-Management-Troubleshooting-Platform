@@ -4,6 +4,7 @@ import { SkeletonLoader } from '../components/SkeletonLoader';
 import { EnterpriseEmptyState } from '../components/EnterpriseEmptyState';
 import { api } from '../services/api';
 import { useScope } from '../context/ScopeContext';
+import { useCluster } from '../context/ClusterContext';
 import { ActionConfirmationModal } from '../components/ActionConfirmationModal';
 import { TemporaryDeletePodModal } from '../components/TemporaryDeletePodModal';
 import { RefreshCw, Trash2, FileText, ExternalLink, Box, GitBranch, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
@@ -31,6 +32,7 @@ const Pods: React.FC = () => {
   const [tempDeletePodTarget, setTempDeletePodTarget] = useState<PodItem | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const { getScopeParams } = useScope();
+  const { activeCluster } = useCluster();
 
   const userRole = localStorage.getItem('user_role') || 'Viewer';
   const canOperate = ['Administrator', 'Platform Engineer', 'DevOps Engineer'].includes(userRole);
@@ -50,7 +52,7 @@ const Pods: React.FC = () => {
 
   useEffect(() => {
     loadPods();
-  }, [JSON.stringify(getScopeParams())]);
+  }, [activeCluster?.id, JSON.stringify(getScopeParams())]);
 
   const handleConfirmAction = async () => {
     if (!selectedPod || !modalAction) return;

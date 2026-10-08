@@ -21,7 +21,7 @@ class ArgoCDClient:
     def _get_base_url(self, cluster_id: Optional[str] = None) -> str:
         try:
             from app.services.cluster_registry import cluster_registry
-            cluster = cluster_registry.get_cluster(cluster_id)
+            cluster = cluster_registry.get_cluster(cluster_id) or cluster_registry.get_default_cluster()
             argocd_url = cluster.get("argocd_url") if cluster else None
             if argocd_url:
                 if not argocd_url.startswith("http"):

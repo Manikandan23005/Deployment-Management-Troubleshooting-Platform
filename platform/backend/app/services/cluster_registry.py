@@ -223,6 +223,8 @@ class ClusterRegistryService:
         return list(self._memory_clusters.values())
 
     def get_cluster(self, cluster_id: str) -> Optional[Dict[str, Any]]:
+        if not cluster_id or cluster_id in ("default", "active"):
+            return self.get_default_cluster()
         if cluster_id in self._memory_clusters:
             return self._memory_clusters[cluster_id]
         if cluster_id == "cluster-minikube-local":
@@ -237,6 +239,10 @@ class ClusterRegistryService:
         for c in clusters:
             if c["id"] == cluster_id:
                 return c
+        # Match by prefix/suffix or name in case slug or id variations exist
+        for c in clusters:
+            if cluster_id in c["id"] or c["id"] in cluster_id or cluster_id.lower() == c.get("name", "").lower():
+                return c
         return None
 
     def get_default_cluster(self) -> Optional[Dict[str, Any]]:
@@ -250,12 +256,23 @@ class ClusterRegistryService:
 
     def add_cluster(self, data: Dict[str, Any]) -> Dict[str, Any]:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        cluster_id = f"cluster-{uuid.uuid4().hex[:8]}"
-        is_default = data.get("is_default", False)
-
-        # Ensure enums
+        cluster_name = data.get("name", "New Cluster")
         provider = data.get("provider", ClusterProvider.MINIKUBE.value)
         environment = data.get("environment", ClusterEnvironment.DEVELOPMENT.value)
+
+        # Deterministic cluster ID priority
+        if data.get("id"):
+            cluster_id = data["id"]
+        elif provider == ClusterProvider.EKS.value or data.get("eks_cluster_name"):
+            eks_name = data.get("eks_cluster_name") or cluster_name.replace("eks-", "")
+            cluster_id = f"cluster-eks-{eks_name}"
+        elif cluster_name:
+            clean_slug = "".join(c if c.isalnum() or c in "-_" else "-" for c in cluster_name.lower()).strip("-")
+            cluster_id = f"cluster-{clean_slug}" if clean_slug else f"cluster-{uuid.uuid4().hex[:8]}"
+        else:
+            cluster_id = f"cluster-{uuid.uuid4().hex[:8]}"
+
+        is_default = data.get("is_default", False)
 
         cluster = {
             "id": cluster_id,

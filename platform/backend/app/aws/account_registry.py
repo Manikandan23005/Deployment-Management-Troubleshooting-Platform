@@ -220,6 +220,7 @@ class AWSAccountRegistryService:
         auto_default = is_default or (len(existing_clusters) == 0)
 
         cluster_data = {
+            "id": f"cluster-eks-{cluster_name}",
             "name": f"eks-{cluster_name}",
             "description": f"Amazon EKS Cluster '{cluster_name}' in AWS Account {account.account_id} ({target_region})",
             "environment": ClusterEnvironment.PRODUCTION.value,

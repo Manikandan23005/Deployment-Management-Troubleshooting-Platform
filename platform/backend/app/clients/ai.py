@@ -30,7 +30,7 @@ class AIClient:
                 return self._call_openai_compatible(
                     url="https://api.groq.com/openai/v1/chat/completions",
                     api_key=settings.GROQ_API_KEY,
-                    model="llama3-8b-8192",
+                    model=getattr(settings, "LLM_MODEL", None) or "llama-3.3-70b-versatile",
                     system_prompt=system_prompt,
                     prompt=prompt
                 )
@@ -66,7 +66,7 @@ class AIClient:
             ],
             "temperature": 0.2
         }
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=45.0) as client:
             response = client.post(url, headers=headers, json=body)
             if response.status_code != 200:
                 raise AIModelTriageException(f"API endpoint returned error {response.status_code}: {response.text}")

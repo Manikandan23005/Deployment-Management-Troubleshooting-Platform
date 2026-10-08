@@ -6,6 +6,10 @@ from typing import Dict, Any, Optional, List
 # pyrefly: ignore [missing-import]
 from app.clients.llm import llm_client
 # pyrefly: ignore [missing-import]
+from app.clients.ai import ai_client
+# pyrefly: ignore [missing-import]
+from app.core.settings import settings
+# pyrefly: ignore [missing-import]
 from app.services.context_builder import context_builder
 # pyrefly: ignore [missing-import]
 from app.services.scope_engine import scope_engine
@@ -18,6 +22,26 @@ from app.core.logging import logger
 
 class AIService:
     """Provides conversational DevOps telemetry analysis, log diagnostics, and platform assistance."""
+
+    # Providers served by the OpenAI-compatible AIClient (not AWS Bedrock).
+    _OPENAI_COMPATIBLE_PROVIDERS = {"groq", "openai", "ollama", "lmstudio"}
+
+    def _invoke_llm(
+        self,
+        prompt: str,
+        system_prompt: str,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> str:
+        """Routes a chat completion to the correct engine based on the selected provider.
+
+        Non-Bedrock providers (groq/openai/ollama/lmstudio) go through the
+        OpenAI-compatible AIClient; everything else uses the AWS Bedrock client.
+        """
+        resolved = (provider or getattr(settings, "AI_PROVIDER", None) or "bedrock").lower()
+        if resolved in self._OPENAI_COMPATIBLE_PROVIDERS:
+            return ai_client.generate_chat_response(prompt, system_prompt=system_prompt, provider=resolved)
+        return llm_client.generate_chat_response(prompt, system_prompt=system_prompt, provider=resolved, model=model)
 
     def chat_troubleshoot(
         self,
@@ -56,7 +80,7 @@ class AIService:
         )
 
         try:
-            ai_text = llm_client.generate_chat_response(user_content, system_prompt=system_prompt, provider=provider, model=model)
+            ai_text = self._invoke_llm(user_content, system_prompt=system_prompt, provider=provider, model=model)
         except Exception as e:
             logger.info(f"LLM provider ({provider or 'default'}) fallback active: {str(e)}")
             ai_text = self._generate_grounded_fallback(prompt, context, history=history)
@@ -122,7 +146,7 @@ class AIService:
         )
 
         try:
-            raw_response = llm_client.generate_chat_response(prompt_with_context, system_prompt=system_prompt, provider=provider)
+            raw_response = self._invoke_llm(prompt_with_context, system_prompt=system_prompt, provider=provider)
             return self._parse_json_response(raw_response)
         except Exception:
             return {

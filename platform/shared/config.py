@@ -26,13 +26,14 @@ class PlatformSettings(BaseSettings):
     GROQ_API_KEY: str = ""
     LMSTUDIO_HOST: str = "http://localhost:1234/v1"
     LLM_MODEL: str = "llama-3.3-70b-versatile"
-    BEDROCK_REGION: str = "us-east-1"
-    BEDROCK_MODEL_ID: str = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    BEDROCK_REGION: str = "ap-south-1"
+    BEDROCK_MODEL_ID: str = "apac.amazon.nova-pro-v1:0"
     
     # Caching
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # AWS Account Defaults (Persistent Connection)
+    AWS_REGION: str = "ap-south-1"
     DEFAULT_AWS_ACCOUNT_ID: str = "605294565283"
     DEFAULT_AWS_ROLE_ARN: str = "arn:aws:iam::605294565283:role/DevOpsNexusAccessRole"
     DEFAULT_AWS_REGION: str = "ap-south-1"

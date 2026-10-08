@@ -32,10 +32,19 @@ class LLMClient:
         t = threading.Thread(target=_worker, daemon=True, name="BedrockVerifierDaemon")
         t.start()
 
+    def _resolve_region(self) -> str:
+        """Resolves the Bedrock region, falling back to AWS_REGION (ap-south-1) rather than us-east-1."""
+        return (
+            getattr(settings, "BEDROCK_REGION", None)
+            or getattr(settings, "AWS_REGION", None)
+            or getattr(settings, "DEFAULT_AWS_REGION", None)
+            or "ap-south-1"
+        )
+
     def _check_bedrock_sync(self):
         with self._check_lock:
-            region = getattr(settings, "BEDROCK_REGION", None) or getattr(settings, "DEFAULT_AWS_REGION", "us-east-1")
-            target_model = getattr(settings, "BEDROCK_MODEL_ID", None) or "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+            region = self._resolve_region()
+            target_model = getattr(settings, "BEDROCK_MODEL_ID", None) or "apac.amazon.nova-pro-v1:0"
             from botocore.config import Config
             boto_config = Config(connect_timeout=2.0, read_timeout=3.0, retries={'max_attempts': 0})
             client = boto3.client("bedrock-runtime", region_name=region, config=boto_config)
@@ -55,18 +64,17 @@ class LLMClient:
                     logger.debug(f"AWS Bedrock pending account activation: {err_str}")
 
     def _generate_bedrock_response(self, prompt: str, system_prompt: str, model_id: Optional[str] = None) -> str:
-        if not self._bedrock_verified:
-            # Bedrock is not yet verified on this AWS account; immediately yield to high-speed deterministic Jarvis
-            raise DevOpsNexusException("AWS Bedrock pending AWS account verification (retrying in background).")
-
-        region = getattr(settings, "BEDROCK_REGION", None) or getattr(settings, "DEFAULT_AWS_REGION", "us-east-1")
-        target_model = model_id or getattr(settings, "BEDROCK_MODEL_ID", None) or "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        # Do NOT hard-block on the background verification flag. Attempt the real converse
+        # call so that genuine AWS errors (e.g. "Operation not allowed", "AccessDenied")
+        # surface to the caller instead of a misleading "pending verification" message.
+        region = self._resolve_region()
+        target_model = model_id or getattr(settings, "BEDROCK_MODEL_ID", None) or "apac.amazon.nova-pro-v1:0"
 
         candidate_models = [
             target_model,
-            "amazon.nova-pro-v1:0",
-            "amazon.nova-lite-v1:0",
-            "us.meta.llama3-3-70b-instruct-v1:0"
+            "apac.amazon.nova-pro-v1:0",
+            "apac.amazon.nova-lite-v1:0",
+            "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
         ]
 
         unique_candidates = []

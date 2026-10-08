@@ -60,8 +60,8 @@ services:
       - DEFAULT_AWS_ROLE_ARN=${DEFAULT_AWS_ROLE_ARN:-arn:aws:iam::605294565283:role/DevOpsNexusAccessRole}
       - DEFAULT_AWS_REGION=${DEFAULT_AWS_REGION:-ap-south-1}
       - AI_PROVIDER=bedrock
-      - BEDROCK_REGION=${BEDROCK_REGION:-us-east-1}
-      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-us.anthropic.claude-3-5-sonnet-20241022-v2:0}
+      - BEDROCK_REGION=${BEDROCK_REGION:-ap-south-1}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-apac.amazon.nova-pro-v1:0}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - REPO_ROOT=/repo
     volumes:

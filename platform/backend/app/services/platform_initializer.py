@@ -53,9 +53,23 @@ class PlatformInitializer:
                 )
                 logger.info("✅ Linked persistent EKS cluster 'devops-nexus-prod' as active target.")
             except Exception as cluster_err:
-                logger.debug(f"EKS target auto-link note: {str(cluster_err)}")
+                # Surface the real reason at WARNING: a swallowed failure here is why the
+                # cluster registry can end up empty and the dashboard shows 0 pods / 0 nodes.
+                logger.warning(f"Failed to link EKS cluster 'devops-nexus-prod' as target: {str(cluster_err)}")
         except Exception as aws_err:
             logger.warning(f"Persistent AWS account initialization note: {str(aws_err)}")
+
+        # 1.6. Verify the cluster registry is populated after bootstrap. If it is empty here,
+        # every Kubernetes data path short-circuits to empty results, so log it loudly.
+        try:
+            from app.services.cluster_registry import cluster_registry
+            registered = cluster_registry.list_clusters()
+            if registered:
+                logger.info(f"✅ Cluster Registry populated with {len(registered)} cluster(s).")
+            else:
+                logger.warning("Cluster Registry is EMPTY after bootstrap — Kubernetes data paths will return empty results.")
+        except Exception as reg_err:
+            logger.warning(f"Cluster registry verification note: {str(reg_err)}")
 
         # 2. Ensure Prometheus NodePort 30090 Exposure
         self._ensure_prometheus_nodeport()

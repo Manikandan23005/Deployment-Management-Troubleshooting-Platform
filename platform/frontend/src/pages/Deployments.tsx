@@ -5,6 +5,7 @@ import { EnterpriseEmptyState } from '../components/EnterpriseEmptyState';
 import { api } from '../services/api';
 import { RefreshCw, Play, X, History, Scale, Trash2, GitBranch, ShieldOff, Layers, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { useScope } from '../context/ScopeContext';
+import { useCluster } from '../context/ClusterContext';
 import { ActionConfirmationModal } from '../components/ActionConfirmationModal';
 import { DisconnectGitOpsModal } from '../components/DisconnectGitOpsModal';
 import { TemporaryDeleteModal } from '../components/TemporaryDeleteModal';
@@ -50,9 +51,11 @@ const Deployments: React.FC = () => {
   const isDevOpsOrAdmin = ['Administrator', 'Platform Engineer', 'DevOps Engineer'].includes(userRole);
   const isAdmin = userRole === 'Administrator' || userRole === 'Platform Engineer';
   const { getScopeParams } = useScope();
+  const { activeCluster, initialized } = useCluster();
 
   const fetchDeployments = async () => {
     try {
+      setLoading(true);
       const data = await api.getDeployments(undefined, getScopeParams());
       setDeployments(data);
     } catch (e) {
@@ -63,8 +66,12 @@ const Deployments: React.FC = () => {
   };
 
   useEffect(() => {
+    // Gate the first fetch on cluster readiness and re-fire when the active
+    // cluster resolves — otherwise this fetches once (often before ready) and
+    // stays at 0 permanently until a manual refresh.
+    if (!initialized) return;
     fetchDeployments();
-  }, [JSON.stringify(getScopeParams())]);
+  }, [initialized, activeCluster?.id, JSON.stringify(getScopeParams())]);
 
   const handleSync = async (item: DeploymentItem) => {
     const appName = item.argocd_app_name || item.name;

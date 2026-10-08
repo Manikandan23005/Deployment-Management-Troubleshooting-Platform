@@ -26,16 +26,25 @@ apiClient.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Response interceptor to clear expired tokens and redirect to /login on 401 Unauthorized
+// Response interceptor for 401 Unauthorized.
+// Only treat a 401 as a genuine auth failure when a token was actually present
+// on the request. A 401 with no token is a transient first-load race (the app is
+// still initializing), so we must NOT clear state or redirect — doing so caused a
+// full-page reload storm that looked like slow/janky navigation and "needs several
+// refreshes". When the token really is rejected, do a single guarded client-side
+// redirect (replace, not href) to avoid a history/reload loop.
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('session_token');
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('username');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      const hadToken = !!localStorage.getItem('session_token');
+      if (hadToken) {
+        localStorage.removeItem('session_token');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('username');
+        if (window.location.pathname !== '/login') {
+          window.location.replace('/login');
+        }
       }
     }
     return Promise.reject(error);

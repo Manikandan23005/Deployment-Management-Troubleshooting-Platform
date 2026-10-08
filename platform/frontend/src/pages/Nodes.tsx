@@ -9,7 +9,7 @@ import { useCluster } from '../context/ClusterContext';
 const Nodes: React.FC = () => {
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const { activeCluster } = useCluster();
+  const { activeCluster, initialized } = useCluster();
 
   const fetchNodes = async () => {
     setLoading(true);
@@ -25,8 +25,11 @@ const Nodes: React.FC = () => {
   };
 
   useEffect(() => {
+    // Gate the first fetch on cluster readiness; re-fire when it resolves so a
+    // fresh load populates nodes without a manual refresh.
+    if (!initialized) return;
     fetchNodes();
-  }, [activeCluster?.id]);
+  }, [initialized, activeCluster?.id]);
 
   const columns = [
     { header: 'Node Name', accessor: 'name' as const },

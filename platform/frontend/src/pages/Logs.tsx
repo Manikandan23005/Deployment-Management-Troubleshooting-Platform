@@ -14,7 +14,7 @@ const Logs: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
   const [liveRefresh, setLiveRefresh] = useState(true);
   const { getScopeParams } = useScope();
-  const { activeCluster, clusters } = useCluster();
+  const { activeCluster, clusters, initialized } = useCluster();
 
   const isConnected = !!activeCluster && clusters.length > 0;
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
@@ -33,7 +33,10 @@ const Logs: React.FC = () => {
         setSelectedPod(names[0]);
       }
     });
-  }, [isConnected, JSON.stringify(getScopeParams())]);
+    // Re-run once the cluster resolves (initialized / activeCluster) so the pod
+    // dropdown populates on first load instead of running once while not yet
+    // connected and never retrying.
+  }, [isConnected, initialized, activeCluster?.id, JSON.stringify(getScopeParams())]);
 
   const fetchLogsData = async (silent = false) => {
     if (!isConnected) {
@@ -55,7 +58,7 @@ const Logs: React.FC = () => {
 
   useEffect(() => {
     fetchLogsData();
-  }, [isConnected, selectedPod, searchTerm, JSON.stringify(getScopeParams())]);
+  }, [isConnected, initialized, activeCluster?.id, selectedPod, searchTerm, JSON.stringify(getScopeParams())]);
 
   // Live Refresh interval: 5 seconds (only if connected and pods exist)
   useEffect(() => {

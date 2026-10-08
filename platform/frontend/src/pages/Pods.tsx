@@ -26,13 +26,13 @@ interface PodItem {
 
 const Pods: React.FC = () => {
   const [pods, setPods] = useState<PodItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedPod, setSelectedPod] = useState<PodItem | null>(null);
   const [modalAction, setModalAction] = useState<'restart' | 'delete' | null>(null);
   const [tempDeletePodTarget, setTempDeletePodTarget] = useState<PodItem | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const { getScopeParams } = useScope();
-  const { activeCluster } = useCluster();
+  const { activeCluster, initialized } = useCluster();
 
   const userRole = localStorage.getItem('user_role') || 'Viewer';
   const canOperate = ['Administrator', 'Platform Engineer', 'DevOps Engineer'].includes(userRole);
@@ -51,8 +51,11 @@ const Pods: React.FC = () => {
   };
 
   useEffect(() => {
+    // Wait until the cluster has resolved before the first fetch so the skeleton
+    // shows instead of a premature "No Active Pods" / 0 on a fresh load.
+    if (!initialized) return;
     loadPods();
-  }, [activeCluster?.id, JSON.stringify(getScopeParams())]);
+  }, [initialized, activeCluster?.id, JSON.stringify(getScopeParams())]);
 
   const handleConfirmAction = async () => {
     if (!selectedPod || !modalAction) return;

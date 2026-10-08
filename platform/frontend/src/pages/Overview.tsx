@@ -13,11 +13,11 @@ const Overview: React.FC = () => {
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [metrics, setMetrics] = useState({ cpu_utilization: 0, memory_utilization: 0, disk_utilization: 0, network_throughput_bytes: 0 });
   const [gitDetails, setGitDetails] = useState({ owner: '', repository: '', branches: [] as string[], latest_commits: [] as any[] });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const { getScopeParams, getScopeLabel } = useScope();
-  const { activeCluster, clusters } = useCluster();
+  const { activeCluster, clusters, initialized } = useCluster();
 
   const isConnected = !!activeCluster && clusters.length > 0;
 
@@ -55,21 +55,21 @@ const Overview: React.FC = () => {
   };
 
   useEffect(() => {
+    // Wait until ClusterContext has resolved the active cluster before the first
+    // fetch, so a fresh page load behaves like a post-refresh load instead of
+    // rendering a confident 0. Keep loading=true while not ready.
+    if (!initialized) return;
     fetchDashboardData();
-    // Safety fallback: ensure loading spinner never blocks for more than 2 seconds
-    const safetyTimer = setTimeout(() => {
-      setLoading(false);
-    }, 2000);
-    return () => clearTimeout(safetyTimer);
-  }, [activeCluster?.id, isConnected, JSON.stringify(getScopeParams())]);
+  }, [initialized, activeCluster?.id, isConnected, JSON.stringify(getScopeParams())]);
 
-  // Real-time auto-refresh interval: 10 seconds
+  // Real-time auto-refresh interval: 10 seconds (no-op until initialized)
   useEffect(() => {
+    if (!initialized) return;
     const timer = setInterval(() => {
       fetchDashboardData(true);
     }, 10000);
     return () => clearInterval(timer);
-  }, [activeCluster?.id, JSON.stringify(getScopeParams())]);
+  }, [initialized, activeCluster?.id, JSON.stringify(getScopeParams())]);
 
   const appColumns = [
     { header: 'Workload', accessor: 'name' as const },

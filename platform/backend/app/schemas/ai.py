@@ -6,6 +6,7 @@ class AIChatRequest(BaseModel):
     """Payload to prompt a chat response."""
     prompt: str = Field(..., description="The user query or context to analyze.")
     provider: Optional[str] = Field(None, description="Select client AI provider: openai, groq, ollama, lmstudio.")
+    model: Optional[str] = Field(None, description="Groq/Bedrock model identifier e.g. openai/gpt-oss-20b.")
     session_id: Optional[str] = Field(None, description="Optional conversational session tracking identifier.")
     scope_mode: Optional[str] = Field("cluster", description="Operations scope mode.")
     scope_namespace: Optional[str] = Field("devops-nexus-prod", description="Scope target namespace.")

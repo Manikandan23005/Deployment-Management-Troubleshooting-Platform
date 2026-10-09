@@ -72,14 +72,14 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
 
 // --- Formatted Table Component ---
 const TableBlock: React.FC<{ rows: string[] }> = ({ rows }) => {
-  if (rows.length < 2) {
-    return <p className="text-xs font-mono text-slate-400 my-1">{rows[0]}</p>;
+  if (!rows || rows.length < 2) {
+    return <p className="text-xs font-mono text-slate-400 my-1">{rows?.[0] || ''}</p>;
   }
   const parseRow = (rowStr: string) => {
-    return rowStr.split('|').map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
+    return (rowStr || '').split('|').map(c => (c || '').trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
   };
   const headers = parseRow(rows[0]);
-  const isSeparator = (r: string) => r.includes('---');
+  const isSeparator = (r: string) => (r || '').includes('---');
   const dataRows = rows.slice(1).filter(r => !isSeparator(r)).map(parseRow);
 
   return (
@@ -112,15 +112,16 @@ const TableBlock: React.FC<{ rows: string[] }> = ({ rows }) => {
 
 // --- Inline Formatter (Bold, Code spans, Italics) ---
 const InlineFormatter: React.FC<{ text: string }> = ({ text }) => {
+  const safeText = typeof text === 'string' ? text : String(text || '');
   const parts = useMemo(() => {
     const tokens: React.ReactNode[] = [];
     const regex = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g;
     let lastIndex = 0;
     let match;
 
-    while ((match = regex.exec(text)) !== null) {
+    while ((match = regex.exec(safeText)) !== null) {
       if (match.index > lastIndex) {
-        tokens.push(text.substring(lastIndex, match.index));
+        tokens.push(safeText.substring(lastIndex, match.index));
       }
       const token = match[0];
       if (token.startsWith('**') && token.endsWith('**')) {
@@ -137,11 +138,11 @@ const InlineFormatter: React.FC<{ text: string }> = ({ text }) => {
       lastIndex = regex.lastIndex;
     }
 
-    if (lastIndex < text.length) {
-      tokens.push(text.substring(lastIndex));
+    if (lastIndex < safeText.length) {
+      tokens.push(safeText.substring(lastIndex));
     }
     return tokens;
-  }, [text]);
+  }, [safeText]);
 
   return <>{parts}</>;
 };
@@ -182,6 +183,26 @@ const FormattedMarkdown: React.FC<{ content: string; isTyping?: boolean }> = ({ 
       }
 
       // Headings
+      if (line.startsWith('# ')) {
+        nodes.push(
+          <h2 key={`h1_${i}`} className="text-lg font-bold text-slate-900 dark:text-white mt-4 mb-2 flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-1">
+            <InlineFormatter text={line.replace('# ', '')} />
+          </h2>
+        );
+        i++;
+        continue;
+      }
+
+      if (line.startsWith('## ')) {
+        nodes.push(
+          <h2 key={`h2_${i}`} className="text-base font-bold text-slate-800 dark:text-white mt-3.5 mb-1.5 flex items-center gap-1.5 border-b border-slate-200/60 dark:border-slate-800/80 pb-1">
+            <InlineFormatter text={line.replace('## ', '')} />
+          </h2>
+        );
+        i++;
+        continue;
+      }
+
       if (line.startsWith('### ')) {
         nodes.push(
           <h3 key={`h3_${i}`} className="text-base font-bold text-slate-800 dark:text-white mt-3 mb-1.5 flex items-center gap-1.5 border-b border-slate-200/50 dark:border-slate-800/80 pb-1">
@@ -323,8 +344,9 @@ const AI: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  // Model selection is advisory; the active provider/model is driven by the backend (AI_PROVIDER / LLM_MODEL).
-  const [aiModel, setAiModel] = useState('openai/gpt-oss-120b');
+  const [aiModel, setAiModel] = useState(() => {
+    return localStorage.getItem('nexus_ai_selected_model') || 'openai/gpt-oss-20b';
+  });
   const [progressStatus, setProgressStatus] = useState<string>('');
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
@@ -413,12 +435,25 @@ const AI: React.FC = () => {
     setMessages(prev => [...prev, userMsg, pendingAiMsg]);
     setInput('');
     setLoading(true);
-    setProgressStatus('Inspecting Live Cluster Telemetry...');
+    setProgressStatus('Inspecting live cluster telemetry & workloads...');
 
     let isDone = false;
+    const pTimer1 = setTimeout(() => {
+      if (!isDone) setProgressStatus('Scanning pod container logs & events...');
+    }, 1200);
+    const pTimer2 = setTimeout(() => {
+      if (!isDone) setProgressStatus('Synthesizing intelligence with Groq...');
+    }, 2800);
+
+    const cleanupTimers = () => {
+      clearTimeout(pTimer1);
+      clearTimeout(pTimer2);
+    };
+
     const safetyTimeout = setTimeout(() => {
       if (!isDone) {
         isDone = true;
+        cleanupTimers();
         setMessages(prev => prev.map(m => {
           if (m.id === pendingAiId && m.isThinking) {
             return {
@@ -436,24 +471,45 @@ const AI: React.FC = () => {
       }
     }, 60000);
 
+    let firstChunkReceived = false;
+
     api.askAIStream(
       text,
       'groq',
       sessionId,
       getScopeParams(),
       (status) => {
-        if (!isDone) setProgressStatus(status);
+        if (!isDone && !firstChunkReceived) setProgressStatus(status);
+      },
+      (delta) => {
+        if (isDone) return;
+        if (!firstChunkReceived) {
+          firstChunkReceived = true;
+          cleanupTimers();
+        }
+        setMessages(prev => prev.map(m => {
+          if (m.id === pendingAiId) {
+            return {
+              ...m,
+              isThinking: false,
+              isTyping: false,
+              text: (m.text || '') + delta
+            };
+          }
+          return m;
+        }));
       },
       (data) => {
         if (isDone) return;
         isDone = true;
+        cleanupTimers();
         clearTimeout(safetyTimeout);
         const fullResponse = data.summary || data.root_cause || 'AI operations analysis completed.';
         setMessages(prev => prev.map(m => {
           if (m.id === pendingAiId) {
             return {
               ...m,
-              text: fullResponse,
+              text: fullResponse || m.text,
               isThinking: false,
               isTyping: false,
               structured: data,
@@ -468,13 +524,14 @@ const AI: React.FC = () => {
       (err) => {
         if (isDone) return;
         isDone = true;
+        cleanupTimers();
         clearTimeout(safetyTimeout);
         const errNotice = `### ⚠️ Connection Notice\n\n${err.message || 'Unable to reach AI completion endpoint.'}`;
         setMessages(prev => prev.map(m => {
           if (m.id === pendingAiId) {
             return {
               ...m,
-              text: errNotice,
+              text: m.text ? m.text : errNotice,
               isThinking: false,
               isTyping: false,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -525,11 +582,14 @@ const AI: React.FC = () => {
             <label className="text-xs text-slate-400 font-semibold">Groq Model:</label>
             <select 
               value={aiModel}
-              onChange={(e) => setAiModel(e.target.value)}
+              onChange={(e) => {
+                setAiModel(e.target.value);
+                localStorage.setItem('nexus_ai_selected_model', e.target.value);
+              }}
               className="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none font-medium cursor-pointer"
             >
-              <option value="openai/gpt-oss-120b">GPT-OSS 120B (quality)</option>
               <option value="openai/gpt-oss-20b">GPT-OSS 20B (fast)</option>
+              <option value="openai/gpt-oss-120b">GPT-OSS 120B (quality)</option>
               <option value="qwen/qwen3.8-27b">Qwen 3 27B</option>
             </select>
           </div>

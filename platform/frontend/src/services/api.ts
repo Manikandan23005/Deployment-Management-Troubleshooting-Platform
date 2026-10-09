@@ -315,44 +315,134 @@ export const api = {
     sessionId: string,
     scopeParams: Record<string, string> | undefined,
     onProgress: (status: string) => void,
+    onChunk: (delta: string) => void,
     onDone: (data: AIResponse) => void,
     onError: (err: any) => void,
     model?: string
   ) => {
-    onProgress("Inspecting live cluster telemetry & workloads...");
+    onProgress("Connecting to live cluster telemetry stream...");
     try {
-      const payload: any = {
+      const params = new URLSearchParams({
         prompt,
         provider: provider || 'groq',
-        session_id: sessionId,
-        model
-      };
+        session_id: sessionId
+      });
+      if (model) params.append('model', model);
       if (scopeParams) {
-        if (scopeParams.mode) payload.scope_mode = scopeParams.mode;
-        if (scopeParams.namespace) payload.scope_namespace = scopeParams.namespace;
-        if (scopeParams.app) payload.scope_app = scopeParams.app;
-        if (scopeParams.domain) payload.scope_domain = scopeParams.domain;
+        if (scopeParams.scope_mode || scopeParams.mode) {
+          params.append('scope_mode', scopeParams.scope_mode || scopeParams.mode);
+        }
+        if (scopeParams.namespace) params.append('scope_namespace', scopeParams.namespace);
+        if (scopeParams.app) params.append('scope_app', scopeParams.app);
+        if (scopeParams.domain) params.append('scope_domain', scopeParams.domain);
       }
 
-      const response = await apiClient.post('/api/v1/ai/chat', payload, {
-        timeout: 60000
-      });
+      const token = localStorage.getItem('session_token');
+      const clusterId = localStorage.getItem('nexus_active_cluster_id');
 
-      if (response.data && response.data.success) {
-        const data = response.data.data;
-        const finalResponse: AIResponse = {
-          ...data,
-          analysis: data.root_cause || data.analysis || '',
-          recommendation: data.recommendations || data.recommendation || []
-        };
-        onDone(finalResponse);
-      } else {
-        const errMessage = response.data?.error?.message || "Failed to receive AI response from cluster.";
-        onError(new Error(errMessage));
+      const headers: Record<string, string> = {
+        'Accept': 'text/event-stream'
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (clusterId) headers['X-Cluster-ID'] = clusterId;
+
+      const url = `${API_URL}/api/v1/ai/chat/stream?${params.toString()}`;
+
+      let accumulatedText = '';
+      let isDoneCalled = false;
+
+      const response = await fetch(url, { method: 'GET', headers });
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream connection failed (HTTP ${response.status})`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let currentEvent = 'message';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.replace('event:', '').trim();
+          } else if (trimmed.startsWith('data:')) {
+            const rawData = trimmed.replace('data:', '').trim();
+            try {
+              const parsed = JSON.parse(rawData);
+              if (currentEvent === 'progress') {
+                onProgress(parsed.status || "Streaming cluster telemetry...");
+              } else if (currentEvent === 'chunk') {
+                if (parsed.delta) {
+                  accumulatedText += parsed.delta;
+                  onChunk(parsed.delta);
+                }
+              } else if (currentEvent === 'done') {
+                isDoneCalled = true;
+                onDone({
+                  ...parsed,
+                  analysis: parsed.root_cause || parsed.summary || accumulatedText,
+                  recommendation: parsed.recommendations || []
+                });
+              }
+            } catch {
+              // Ignore non-json lines
+            }
+          }
+        }
+      }
+
+      if (!isDoneCalled && accumulatedText) {
+        onDone({
+          summary: accumulatedText,
+          root_cause: accumulatedText,
+          evidence: ["DevOps Nexus Real-Time Streaming Telemetry"],
+          affected_resources: [],
+          recommendations: [],
+          severity: "Info",
+          confidence: 99
+        });
       }
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message || err.response?.data?.detail || err.message || "Failed to connect to AI engine.";
-      onError(new Error(msg));
+      // Graceful fallback to regular POST if stream fails
+      console.warn("Stream error, falling back to POST /api/v1/ai/chat:", err);
+      try {
+        const payload: any = {
+          prompt,
+          provider: provider || 'groq',
+          session_id: sessionId,
+          model
+        };
+        if (scopeParams) {
+          if (scopeParams.scope_mode) payload.scope_mode = scopeParams.scope_mode;
+          else if (scopeParams.mode) payload.scope_mode = scopeParams.mode;
+          if (scopeParams.namespace) payload.scope_namespace = scopeParams.namespace;
+          if (scopeParams.app) payload.scope_app = scopeParams.app;
+          if (scopeParams.domain) payload.scope_domain = scopeParams.domain;
+        }
+
+        const postRes = await apiClient.post('/api/v1/ai/chat', payload, { timeout: 60000 });
+        if (postRes.data && postRes.data.success) {
+          const data = postRes.data.data;
+          onDone({
+            ...data,
+            analysis: data.root_cause || data.analysis || '',
+            recommendation: data.recommendations || data.recommendation || []
+          });
+        } else {
+          onError(new Error(postRes.data?.error?.message || "Failed to receive AI response."));
+        }
+      } catch (fallbackErr: any) {
+        const msg = fallbackErr.response?.data?.error?.message || fallbackErr.message || "Failed to connect to AI engine.";
+        onError(new Error(msg));
+      }
     }
   },
 

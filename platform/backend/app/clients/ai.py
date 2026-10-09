@@ -12,7 +12,8 @@ class AIClient:
         self, 
         prompt: str, 
         system_prompt: str = "You are a DevOps Incident Analysis Assistant.",
-        provider: Optional[str] = None
+        provider: Optional[str] = None,
+        model: Optional[str] = None
     ) -> str:
         provider_name = provider or settings.AI_PROVIDER or "ollama"
         provider_name = provider_name.lower()
@@ -22,15 +23,19 @@ class AIClient:
                 return self._call_openai_compatible(
                     url="https://api.openai.com/v1/chat/completions",
                     api_key=settings.OPENAI_API_KEY,
-                    model="gpt-4-turbo",
+                    model=model or "gpt-4-turbo",
                     system_prompt=system_prompt,
                     prompt=prompt
                 )
             elif provider_name == "groq":
+                groq_model = model or getattr(settings, "LLM_MODEL", None) or "openai/gpt-oss-20b"
+                # If legacy/unsupported model name was specified, fallback to fast gpt-oss-20b
+                if "llama" in groq_model.lower():
+                    groq_model = "openai/gpt-oss-20b"
                 return self._call_openai_compatible(
                     url="https://api.groq.com/openai/v1/chat/completions",
                     api_key=settings.GROQ_API_KEY,
-                    model=getattr(settings, "LLM_MODEL", None) or "llama-3.3-70b-versatile",
+                    model=groq_model,
                     system_prompt=system_prompt,
                     prompt=prompt
                 )
@@ -49,6 +54,72 @@ class AIClient:
         except Exception as e:
             logger.error(f"AI Client provider {provider_name} request failed: {str(e)}")
             raise AIModelTriageException(f"AI completions failed: {str(e)}")
+
+    def stream_chat_response(
+        self,
+        prompt: str,
+        system_prompt: str = "You are a DevOps Incident Analysis Assistant.",
+        provider: Optional[str] = None,
+        model: Optional[str] = None
+    ):
+        """Streams chat completion tokens in real-time from Groq or OpenAI."""
+        provider_name = (provider or settings.AI_PROVIDER or "groq").lower()
+        if provider_name == "groq":
+            groq_model = model or getattr(settings, "LLM_MODEL", None) or "openai/gpt-oss-20b"
+            if "llama" in groq_model.lower():
+                groq_model = "openai/gpt-oss-20b"
+            yield from self._stream_openai_compatible(
+                url="https://api.groq.com/openai/v1/chat/completions",
+                api_key=settings.GROQ_API_KEY,
+                model=groq_model,
+                system_prompt=system_prompt,
+                prompt=prompt
+            )
+        elif provider_name == "openai":
+            yield from self._stream_openai_compatible(
+                url="https://api.openai.com/v1/chat/completions",
+                api_key=settings.OPENAI_API_KEY,
+                model=model or "gpt-4-turbo",
+                system_prompt=system_prompt,
+                prompt=prompt
+            )
+        else:
+            full_text = self.generate_chat_response(prompt, system_prompt=system_prompt, provider=provider, model=model)
+            for chunk in full_text.split(" "):
+                yield chunk + " "
+
+    def _stream_openai_compatible(self, url: str, api_key: str, model: str, system_prompt: str, prompt: str):
+        import json
+        if not api_key:
+            raise AIModelTriageException("API Key is missing for selected remote completions engine.")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+        body = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "stream": True,
+            "temperature": 0.2
+        }
+        with httpx.Client(timeout=45.0) as client:
+            with client.stream("POST", url, headers=headers, json=body) as response:
+                if response.status_code != 200:
+                    raise AIModelTriageException(f"Stream API returned {response.status_code}")
+                for line in response.iter_lines():
+                    if line.startswith("data: ") and line.strip() != "data: [DONE]":
+                        try:
+                            chunk = json.loads(line[6:])
+                            choices = chunk.get("choices")
+                            if choices and len(choices) > 0:
+                                delta = choices[0].get("delta", {}).get("content", "")
+                                if delta:
+                                    yield delta
+                        except Exception:
+                            continue
 
     def _call_openai_compatible(self, url: str, api_key: str, model: str, system_prompt: str, prompt: str) -> str:
         if not api_key:

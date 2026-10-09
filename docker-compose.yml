@@ -61,7 +61,7 @@ services:
       - DEFAULT_AWS_REGION=${DEFAULT_AWS_REGION:-ap-south-1}
       - AI_PROVIDER=${AI_PROVIDER:-bedrock}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-llama-3.3-70b-versatile}
+      - LLM_MODEL=${LLM_MODEL:-openai/gpt-oss-20b}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - BEDROCK_REGION=${BEDROCK_REGION:-ap-south-1}
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-apac.amazon.nova-pro-v1:0}

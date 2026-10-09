@@ -36,7 +36,17 @@ async def chat_troubleshoot(request: Request, body: AIChatRequest):
     except Exception:
         pass
     try:
-        response_data = ai_service.chat_troubleshoot(body.prompt, provider=body.provider, session_id=body.session_id, scope=scope)
+        loop = asyncio.get_event_loop()
+        response_data = await loop.run_in_executor(
+            None,
+            lambda: ai_service.chat_troubleshoot(
+                body.prompt,
+                provider=body.provider,
+                model=body.model,
+                session_id=body.session_id,
+                scope=scope
+            )
+        )
         audit_service.log_action(
             username=username,
             role_name=user_dict.get("role", "Viewer"),
@@ -65,9 +75,9 @@ async def chat_troubleshoot_stream(
     app: Optional[str] = Query(None),
     scope_domain: Optional[str] = Query(None),
     domain: Optional[str] = Query(None),
-    model: Optional[str] = Query(None, description="AWS Bedrock target model ID.")
+    model: Optional[str] = Query(None, description="Target model ID.")
 ):
-    """Streams AIOps agent execution phases and final diagnostics payload using Server-Sent Events (SSE)."""
+    """Streams AIOps agent execution chunks and final diagnostics payload in real-time using Server-Sent Events (SSE)."""
     try:
         user_dict = get_current_user(request)
     except Exception:
@@ -97,34 +107,69 @@ async def chat_troubleshoot_stream(
     )
     
     async def event_generator():
-        try:
-            yield f"event: progress\ndata: {json.dumps({'status': 'Inspecting Live Cluster State'})}\n\n"
-            await asyncio.sleep(0.01)
+        import queue
+        import threading
+        from app.utils.session_manager import session_manager
 
-            loop = asyncio.get_event_loop()
-            res = await loop.run_in_executor(
-                None,
-                lambda: ai_service.chat_troubleshoot(
+        yield f"event: progress\ndata: {json.dumps({'status': 'Connecting live cluster telemetry...'})}\n\n"
+        await asyncio.sleep(0.01)
+
+        q = queue.Queue()
+
+        def run_stream():
+            try:
+                for token in ai_service.stream_troubleshoot(
                     prompt=prompt,
                     provider=provider,
                     model=model,
                     session_id=session_id,
                     scope=scope
-                )
-            )
+                ):
+                    q.put(("token", token))
+                q.put(("done", None))
+            except Exception as ex:
+                q.put(("error", str(ex)))
 
-            yield f"event: done\ndata: {json.dumps(res)}\n\n"
-        except Exception as e:
-            err_payload = {
-                "summary": f"AI Operations Analysis: {str(e)}",
-                "root_cause": str(e),
-                "evidence": ["DevOps Nexus Telemetry Query Service"],
-                "affected_resources": [],
-                "recommendations": ["Verify cluster connectivity or check platform settings."],
-                "severity": "Info",
-                "confidence": 80
-            }
-            yield f"event: done\ndata: {json.dumps(err_payload)}\n\n"
+        thread = threading.Thread(target=run_stream, daemon=True)
+        thread.start()
+
+        collected_tokens = []
+        while True:
+            try:
+                item_type, item_data = q.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.015)
+                continue
+
+            if item_type == "token":
+                collected_tokens.append(item_data)
+                yield f"event: chunk\ndata: {json.dumps({'delta': item_data})}\n\n"
+            elif item_type == "done":
+                break
+            elif item_type == "error":
+                from app.services.cluster_state_cache import cluster_state_cache
+                ctx = cluster_state_cache.get_context(prompt, session_id=session_id, scope=scope)
+                history = session_manager.get_history(session_id)
+                fallback_text = ai_service._generate_grounded_fallback(prompt, ctx, history=history)
+                yield f"event: chunk\ndata: {json.dumps({'delta': fallback_text})}\n\n"
+                collected_tokens = [fallback_text]
+                break
+
+        full_text = "".join(collected_tokens)
+        session_manager.add_message(session_id, "user", prompt)
+        session_manager.add_message(session_id, "assistant", full_text)
+
+        res = {
+            "summary": full_text,
+            "root_cause": full_text,
+            "evidence": ["DevOps Nexus Real-Time Streaming Telemetry"],
+            "affected_resources": [],
+            "recommendations": ["Monitor live telemetry streams in 'Metrics' and 'Logs'."],
+            "severity": "Info",
+            "confidence": 99,
+            "evidence_quality": "HIGH"
+        }
+        yield f"event: done\ndata: {json.dumps(res)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

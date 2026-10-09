@@ -29,7 +29,8 @@ def test_ai_chat_completions(client):
 def test_ai_incident_analysis(client):
     mock_json = '{"summary": "Pod Incident Summary", "root_cause": "Detailed Crash Analysis", "evidence": ["OOMKilled"], "recommendations": ["Increase memory limits"], "affected_resources": ["payment-pod"], "severity": "Critical", "confidence": 100}'
     with patch("app.services.context_builder.context_builder.build_incident_context", return_value={"target_pod": "payment-pod"}), \
-         patch("app.clients.llm.llm_client.generate_chat_response", return_value=mock_json):
+         patch("app.clients.llm.llm_client.generate_chat_response", return_value=mock_json), \
+         patch("app.clients.ai.ai_client.generate_chat_response", return_value=mock_json):
         response = client.post(
             "/api/v1/ai/analyze-incident",
             json={

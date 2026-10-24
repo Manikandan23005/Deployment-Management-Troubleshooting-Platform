@@ -219,16 +219,30 @@ class AWSAccountRegistryService:
 
         auto_default = is_default or (len(existing_clusters) == 0)
 
+        lower_name = cluster_name.lower()
+        if "-dev" in lower_name or lower_name.endswith("dev") or lower_name == "dev":
+            cluster_env = ClusterEnvironment.DEVELOPMENT.value
+            default_ns = "devops-nexus-dev"
+        elif "qa" in lower_name:
+            cluster_env = ClusterEnvironment.QA.value
+            default_ns = "devops-nexus-qa"
+        elif "stage" in lower_name or "staging" in lower_name:
+            cluster_env = ClusterEnvironment.STAGING.value
+            default_ns = "devops-nexus-stage"
+        else:
+            cluster_env = ClusterEnvironment.PRODUCTION.value
+            default_ns = "devops-nexus-prod"
+
         cluster_data = {
             "id": f"cluster-eks-{cluster_name}",
             "name": f"eks-{cluster_name}",
             "description": f"Amazon EKS Cluster '{cluster_name}' in AWS Account {account.account_id} ({target_region})",
-            "environment": ClusterEnvironment.PRODUCTION.value,
+            "environment": cluster_env,
             "provider": ClusterProvider.EKS.value,
             "context_name": f"arn:aws:eks:{target_region}:{account.account_id}:cluster/{cluster_name}",
             "api_server": eks_cluster.endpoint,
             "authentication_type": "AWS_IAM_EKS",
-            "default_namespace": "devops-nexus-prod",
+            "default_namespace": default_ns,
             "is_default": auto_default,
             "status": ClusterStatus.CONNECTED.value,
             "aws_account_id": account.account_id,

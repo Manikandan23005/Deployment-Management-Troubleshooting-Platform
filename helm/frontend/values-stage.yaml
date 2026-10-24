@@ -1,0 +1,19 @@
+global:
+  environment: stage
+serviceName: frontend
+replicaCount: 1
+containerPort: 3000
+image:
+  repository: 605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/frontend
+  tag: 1.2.0
+  pullPolicy: Always
+service:
+  type: ClusterIP
+  port: 3000
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

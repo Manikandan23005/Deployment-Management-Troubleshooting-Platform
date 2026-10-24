@@ -19,7 +19,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "Kubernetes control plane version for Amazon EKS"
   type        = string
-  default     = "1.30"
+  default     = "1.32"
 }
 
 variable "assume_role_arn" {

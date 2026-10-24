@@ -1,22 +1,22 @@
 global:
-  environment: "qa"
-serviceName: "products"
+  environment: qa
+serviceName: products
 replicaCount: 1
 containerPort: 8000
 image:
-  repository: "products"
-  tag: "latest"
-  pullPolicy: "Never"
+  repository: 605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/products
+  tag: 1.2.0
+  pullPolicy: Always
 service:
-  type: "ClusterIP"
+  type: ClusterIP
   port: 8000
 resources:
   limits:
-    cpu: "200m"
-    memory: "256Mi"
+    cpu: 250m
+    memory: 256Mi
   requests:
-    cpu: "50m"
-    memory: "64Mi"
+    cpu: 50m
+    memory: 64Mi
 hpa:
   minReplicas: 1
   maxReplicas: 2

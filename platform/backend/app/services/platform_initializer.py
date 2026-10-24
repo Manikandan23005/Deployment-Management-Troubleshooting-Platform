@@ -43,19 +43,19 @@ class PlatformInitializer:
                 acc = aws_account_registry.register_account(req)
                 logger.info(f"✅ Registered persistent AWS account {default_acc_id} ({default_role_arn}).")
 
-            # Register/link EKS cluster target
-            try:
-                aws_account_registry.register_eks_cluster_as_target(
-                    acc.id if acc else default_acc_id,
-                    "devops-nexus-prod",
-                    region=default_region,
-                    is_default=True
-                )
-                logger.info("✅ Linked persistent EKS cluster 'devops-nexus-prod' as active target.")
-            except Exception as cluster_err:
-                # Surface the real reason at WARNING: a swallowed failure here is why the
-                # cluster registry can end up empty and the dashboard shows 0 pods / 0 nodes.
-                logger.warning(f"Failed to link EKS cluster 'devops-nexus-prod' as target: {str(cluster_err)}")
+            # Register/link all target EKS clusters (prod, dev, qa, stage)
+            target_clusters = ["devops-nexus-prod", "devops-nexus-dev", "devops-nexus-qa", "devops-nexus-stage"]
+            for cname in target_clusters:
+                try:
+                    aws_account_registry.register_eks_cluster_as_target(
+                        acc.id if acc else default_acc_id,
+                        cname,
+                        region=default_region,
+                        is_default=(cname == "devops-nexus-prod")
+                    )
+                    logger.info(f"✅ Linked persistent EKS cluster '{cname}' as target.")
+                except Exception as cluster_err:
+                    logger.warning(f"Could not link EKS cluster '{cname}' as target: {str(cluster_err)}")
         except Exception as aws_err:
             logger.warning(f"Persistent AWS account initialization note: {str(aws_err)}")
 

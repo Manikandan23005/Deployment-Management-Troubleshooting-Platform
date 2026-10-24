@@ -1,25 +1,19 @@
 global:
-  environment: "dev"
-serviceName: "frontend"
+  environment: dev
+serviceName: frontend
 replicaCount: 1
 containerPort: 3000
 image:
-  repository: "frontend"
-  tag: "latest"
-  pullPolicy: "Never"
+  repository: 605294565283.dkr.ecr.ap-south-1.amazonaws.com/devops-nexus/frontend
+  tag: 1.2.0
+  pullPolicy: Always
 service:
-  type: "ClusterIP"
+  type: ClusterIP
   port: 3000
 resources:
   limits:
-    cpu: "200m"
-    memory: "256Mi"
+    cpu: 250m
+    memory: 256Mi
   requests:
-    cpu: "50m"
-    memory: "64Mi"
-hpa:
-  minReplicas: 1
-  maxReplicas: 2
-  targetCPU: 80
-ingress:
-  enabled: false
+    cpu: 50m
+    memory: 64Mi

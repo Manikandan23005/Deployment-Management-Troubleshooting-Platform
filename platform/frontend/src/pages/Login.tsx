@@ -104,6 +104,23 @@ const Login: React.FC = () => {
           >
             {loading ? 'Authenticating Operator...' : 'Authorize Session'}
           </button>
+
+          {/* Quick-fill Demo Credentials */}
+          <div className="pt-2 text-center border-t border-slate-800/60">
+            <p className="text-[11px] text-slate-500 font-medium">
+              Default operator:{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('admin');
+                  setPassword('DevOpsNexus@123');
+                }}
+                className="text-blue-400 hover:text-blue-300 font-mono underline cursor-pointer"
+              >
+                admin / DevOpsNexus@123
+              </button>
+            </p>
+          </div>
         </form>
       </div>
     </div>
